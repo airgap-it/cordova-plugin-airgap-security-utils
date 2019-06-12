@@ -1,0 +1,16 @@
+{
+  "name": "cordova-plugin-airgap-utilities",
+  "version": "1.0.0",
+  "description": "AirGap Security Utilities",
+  "cordova": {
+    "id": "cordova-plugin-airgap-utilities",
+    "platforms": [
+      "ios"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-ios"
+  ],
+  "author": "Papers GmbH <contact@papers.ch> (https://papers.ch)"
+}
