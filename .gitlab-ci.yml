@@ -5,7 +5,7 @@ variables:
   IMAGE_TAG_CURRENT: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
 stages:
-  # - build
+  - build
 #  - test
   - publish
 
