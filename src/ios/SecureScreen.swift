@@ -13,8 +13,6 @@ public final class SecureScreen {
 
 	private static let storyboardNameKey = "UILaunchStoryboardName"
 
-	private static let `default` = SecureScreen()
-
 	private var outterController: UIViewController? {
 		guard let root = UIApplication.shared.keyWindow?.rootViewController else {
 			return nil
@@ -27,35 +25,64 @@ public final class SecureScreen {
 	}
 
 	private weak var presentedViewController: UIViewController?
-	private var willResignActiveObserver: NSObjectProtocol?
-	private var didBecomeActiveObserver: NSObjectProtocol?
+	private var willResignActiveObserver: Observer?
+	private var didBecomeActiveObserver: Observer?
 
-	public static func activate() {
-		SecureScreen.default.start()
+	let screen: UIScreen
+
+	var isCaptured: Bool {
+		return screen.isCaptured
 	}
 
-	public static func deactivate() {
-		SecureScreen.default.stop()
+	public init(screen: UIScreen = .main) {
+		self.screen = screen
 	}
 
-	private init() {}
-
-	deinit {
-		stop()
+	public func startOverlayProtection() {
+		guard willResignActiveObserver == nil, didBecomeActiveObserver == nil else {
+			return
+		}
+		willResignActiveObserver = Observer(name: UIApplication.willResignActiveNotification, object: UIApplication.shared) { [unowned self] notification in
+			self.showOverlay()
+		}
+		didBecomeActiveObserver = Observer(name: UIApplication.didBecomeActiveNotification, object: UIApplication.shared) { [unowned self] notification in
+			self.hideOverlay()
+		}
 	}
 
-	private func show() {
+	public func stopOverlayProtection() {
+		willResignActiveObserver = nil
+		didBecomeActiveObserver = nil
+	}
+
+	public func addScreenCaptureObserver(using block: @escaping (Bool) -> ()) -> Observer {
+		return Observer(name: UIScreen.capturedDidChangeNotification, object: screen) { [weak self] (notification) in
+			guard let selfStrong = self else {
+				return
+			}
+			block(selfStrong.screen.isCaptured)
+		}
+	}
+
+	public func addScreenshotObserver(using block: @escaping () -> ()) -> Observer {
+		return Observer(name: UIApplication.userDidTakeScreenshotNotification, object: UIApplication.shared) { (notification) in
+			block()
+		}
+	}
+
+	private func showOverlay() {
 		guard
+			presentedViewController == nil,
 			let outterController = self.outterController,
 			let controller = controllerToPresent() else {
 				return
 		}
 		controller.modalPresentationStyle = .fullScreen
 		outterController.present(controller, animated: false)
-		self.presentedViewController = controller
+		presentedViewController = controller
 	}
 
-	private func hide() {
+	private func hideOverlay() {
 		guard let presented = presentedViewController, let presenting = presented.presentingViewController else {
 			return
 		}
@@ -63,25 +90,7 @@ public final class SecureScreen {
 		presenting.dismiss(animated: false) {
 			self.present(controllers, from: presenting)
 		}
-		self.presentedViewController = nil
-	}
-
-	private func start() {
-		willResignActiveObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: UIApplication.shared, queue: .main) { [unowned self] notification in
-			self.show()
-		}
-		didBecomeActiveObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: UIApplication.shared, queue: .main) { [unowned self] notification in
-			self.hide()
-		}
-	}
-
-	private func stop() {
-		if let observer = willResignActiveObserver {
-			NotificationCenter.default.removeObserver(observer)
-		}
-		if let observer = didBecomeActiveObserver {
-			NotificationCenter.default.removeObserver(observer)
-		}
+		presentedViewController = nil
 	}
 
 	private func controllerToPresent() -> UIViewController? {
@@ -99,13 +108,28 @@ public final class SecureScreen {
 		}
 	}
 
-	private func presentedControllers(from preseting: UIViewController) -> [UIViewController] {
+	private func presentedControllers(from presenting: UIViewController) -> [UIViewController] {
 		var result = [UIViewController]()
-		var current = preseting
+		var current = presenting
 		while let controller = current.presentedViewController {
 			result.append(controller)
 			current = controller
 		}
 		return result
+	}
+
+	public class Observer {
+
+		private var center: NotificationCenter
+		private var observer: NSObjectProtocol
+
+		fileprivate init(name: Notification.Name, object: Any? = nil, center: NotificationCenter = .default, handler: @escaping (Notification) -> ()) {
+			self.center = center
+			self.observer = center.addObserver(forName: name, object: object, queue: .main, using: handler)
+		}
+
+		deinit {
+			center.removeObserver(observer)
+		}
 	}
 }
