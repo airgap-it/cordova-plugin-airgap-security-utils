@@ -1,6 +1,6 @@
 import Foundation
 
-@objc(UtilitiesPlugin) class UtilitiesPlugin : CDVPlugin {
+@objc(SecurityUtilsPlugin) class SecurityUtilsPlugin : CDVPlugin {
 
 	private var secureScreen: SecureScreen!
 	private var screenCaptureObservers: [String:SecureScreen.Observer]!

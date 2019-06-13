@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-airgap-utilities" version="1.0.0">
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-airgap-security-utils" version="0.1.0">
 	<name>AirGap Security Utilities</name>
-	<js-module name="Utilities" src="www/utilities.js">
+	<js-module name="SecurityUtils" src="www/security-utils.js">
 		<runs />
-		<clobbers target="Utilities"/>
+		<clobbers target="SecurityUtils"/>
 	</js-module>
 	<platform name="ios">
 		<config-file parent="/*" target="config.xml">
-			<feature name="Utilities">
-				<param name="ios-package" value="UtilitiesPlugin"/>
+			<feature name="SecurityUtils">
+				<param name="ios-package" value="SecurityUtilsPlugin"/>
 				<param name="onload" value="true" />
 			</feature>
 		</config-file>
-		<source-file src="src/ios/UtilitiesPlugin.swift"/>
+		<source-file src="src/ios/SecurityUtilsPlugin.swift"/>
 		<source-file src="src/ios/SecureScreen.swift"/>
 	</platform>
 </plugin>

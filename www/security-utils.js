@@ -1,6 +1,6 @@
 var exec = require('cordova/exec');
 
-var PLUGIN_NAME = 'Utilities'
+var PLUGIN_NAME = 'SecurityUtils'
 
 var SecureScreen = {};
 
