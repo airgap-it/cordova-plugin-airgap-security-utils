@@ -9,16 +9,16 @@ stages:
 #  - test
   - publish
 
-# build:
-#   stage: build
-#   before_script:
-#     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-#   script:
-#     - docker build -t $IMAGE_TAG .
-#     - docker tag $IMAGE_TAG $IMAGE_TAG_CURRENT
-#     - docker push $IMAGE_TAG_CURRENT
-#   tags:
-#     - docker
+build:
+  stage: build
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_TAG .
+    - docker tag $IMAGE_TAG $IMAGE_TAG_CURRENT
+    - docker push $IMAGE_TAG_CURRENT
+  tags:
+    - docker
 
 #unit:
 #  stage: test

@@ -8,6 +8,11 @@
       "ios"
     ]
   },
+  "homepage": "https://github.com/airgap-it/cordova-plugin-airgap-security-utils#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/airgap-it/cordova-plugin-airgap-security-utils.git"
+  },
   "keywords": [
     "ecosystem:cordova",
     "cordova-ios"
