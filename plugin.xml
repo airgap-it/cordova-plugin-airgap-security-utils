@@ -14,5 +14,6 @@
 		</config-file>
 		<source-file src="src/ios/SecurityUtilsPlugin.swift"/>
 		<source-file src="src/ios/SecureScreen.swift"/>
+		<source-file src="src/ios/DeviceIntegrity.swift"/>
 	</platform>
 </plugin>

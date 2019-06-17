@@ -44,4 +44,11 @@ import Foundation
 		screenshotObservers.removeAll()
 		commandDelegate.send(CDVPluginResult(status: CDVCommandStatus_OK), callbackId: command.callbackId)
 	}
+
+	@objc func assessIntegerity(_ command: CDVInvokedUrlCommand) {
+		DeviceIntegrity.assess { assessment in
+			let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: assessment == .ok)
+			self.commandDelegate.send(result, callbackId: command.callbackId)
+		}
+	}
 }

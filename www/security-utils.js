@@ -20,4 +20,11 @@ SecureScreen.removeScreenshotObservers = function () {
 	exec(function() {}, null, PLUGIN_NAME, 'removeScreenshotObservers', []);	
 }
 
+var DeviceIntegrity = {};
+
+DeviceIntegrity.assess = function(callback) {
+	exec(callback, null, PLUGIN_NAME, 'assessIntegerity', [])
+}
+
 exports.SecureScreen = SecureScreen;
+exports.DeviceIntegrity = DeviceIntegrity;
