@@ -18,7 +18,7 @@ public final class SecureScreen {
 			return nil
 		}
 		var result = root
-		while let presented = result.presentedViewController {
+		while let presented = result.presentedViewController, !presented.isBeingDismissed {
 			result = presented
 		}
 		return result
