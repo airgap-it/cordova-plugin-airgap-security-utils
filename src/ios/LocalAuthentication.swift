@@ -76,7 +76,6 @@ public class LocalAuthentication {
 		operation.localizedReason = reason ?? context.localizedReason
 		operation.accessOperation = accessOperation
 		if needsAccessInvalidation {
-			print("ACCESS INVALIDATING")
 			operation.addDependency(createInvalidateOperation())
 		}
 		operation.completionBlock = { [unowned operation] in
@@ -94,7 +93,6 @@ public class LocalAuthentication {
 		let operation = AuthenticationOperation(localAuth: self)
 		operation.localizedReason = reason ?? context.localizedReason
 		if needsAuthenticationInvalidation {
-			print("AUTH INVALIDATING")
 			operation.addDependency(createInvalidateOperation())
 		}
 		lastBackground = nil
@@ -131,7 +129,6 @@ public class LocalAuthentication {
 				}
 			}
 			didEnterBackgroundObserver = Observer(name: UIApplication.didEnterBackgroundNotification, object: UIApplication.shared) { [unowned self] _ in
-				print("SETTING BACKGROUND DATE")
 				self.lastBackground = Date()
 			}
 		} else if !automatic && didBecomeActiveObserver != nil {
