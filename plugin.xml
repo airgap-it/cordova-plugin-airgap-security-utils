@@ -5,6 +5,7 @@
 		<runs />
 		<clobbers target="SecurityUtils"/>
 	</js-module>
+	<!-- iOS -->
 	<platform name="ios">
 		<config-file parent="/*" target="config.xml">
 			<feature name="SecurityUtils">
@@ -15,5 +16,27 @@
 		<source-file src="src/ios/SecurityUtilsPlugin.swift"/>
 		<source-file src="src/ios/SecureScreen.swift"/>
 		<source-file src="src/ios/DeviceIntegrity.swift"/>
+		<source-file src="src/ios/SecureStorage.swift"/>
+    <source-file src="src/ios/LocalAuthentication.swift"/>
 	</platform>
+	<!-- Android -->
+    <platform name="android">
+      <config-file target="res/xml/config.xml" parent="/*">
+        <feature name="SecurityUtils">
+          <param name="android-package" value="ch.airgap.securityutils.SecurityUtils" />
+          <param name="onload" value="true" />
+        </feature>
+      </config-file>
+      <config-file parent="/*" target="AndroidManifest.xml"/>
+      <framework custom="true" src="src/android/security-utils.gradle" type="gradleReference"/>
+      <resource-file src="androidlibs/ch-papers-securestorage.aar" target="libs/ch-papers-securestorage.aar"/>
+      <resource-file src="src/android/build-extras.gradle" target="build-extras.gradle"/>
+      <source-file src="src/android/ch/airgap/securityutils/SecurityUtils.java" target-dir="src/ch/airgap/securityutils/" />
+    </platform>
+	<!-- browser -->
+    <platform name="browser">
+        <js-module src="src/browser/SecureStorageProxy.js" name="SecureStorageProxy">
+            <runs />
+        </js-module>
+    </platform>
 </plugin>

@@ -117,19 +117,19 @@ public final class SecureScreen {
 		}
 		return result
 	}
+}
 
-	public class Observer {
+public class Observer {
 
-		private var center: NotificationCenter
-		private var observer: NSObjectProtocol
+	private var center: NotificationCenter
+	private var observer: NSObjectProtocol
 
-		fileprivate init(name: Notification.Name, object: Any? = nil, center: NotificationCenter = .default, handler: @escaping (Notification) -> ()) {
-			self.center = center
-			self.observer = center.addObserver(forName: name, object: object, queue: .main, using: handler)
-		}
+	init(name: Notification.Name, object: Any? = nil, center: NotificationCenter = .default, handler: @escaping (Notification) -> ()) {
+		self.center = center
+		self.observer = center.addObserver(forName: name, object: object, queue: .main, using: handler)
+	}
 
-		deinit {
-			center.removeObserver(observer)
-		}
+	deinit {
+		center.removeObserver(observer)
 	}
 }
