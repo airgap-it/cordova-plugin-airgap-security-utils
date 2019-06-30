@@ -21,12 +21,19 @@ public enum DeviceIntegrity {
 
 	private static let RTLD_DEFAULT = UnsafeMutableRawPointer(bitPattern: -2)
 
+	private static let queue = DispatchQueue(label: "it.airgap.DI", qos: .default)
+
 	@inline(__always) public static func assess(completion: @escaping (ResultSet) -> () ) {
-		DispatchQueue.global(qos: .utility).async {
-			let result: ResultSet = [checkFiles(), checkLinks(), checkSyscalls(), checkWrite(), checkLibraries()]
-			DispatchQueue.main.async {
-				completion(result)
-			}
+		DeviceIntegrity.queue.async {
+			let result: ResultSet = [
+				checkFiles(),
+				checkLinks(),
+				checkSyscalls(),
+				checkWrite(),
+				checkLibraries(),
+				checkDebugger()
+			]
+			completion(result)
 		}
 	}
 
@@ -111,6 +118,20 @@ public enum DeviceIntegrity {
 	}
 
 	@inline(__always) private static func lookup<FunctionType>(_ function: Function) -> FunctionType? {
+
+		typealias Dlsym = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<Int8>) -> UnsafeMutableRawPointer?
+
+		let dlsymFnc: Dlsym? = Function.dlsym.name?.withCString { cString in
+			guard let fnc = dlsym(DeviceIntegrity.RTLD_DEFAULT, cString) else {
+				return nil
+			}
+			return unsafeBitCast(fnc, to: Dlsym.self)
+		}
+
+		guard let dlsym = dlsymFnc else {
+			return nil
+		}
+
 		return function.name?.withCString { cString in
 			guard let fnc = dlsym(DeviceIntegrity.RTLD_DEFAULT, cString) else {
 				return nil
@@ -164,6 +185,27 @@ public enum DeviceIntegrity {
 		return .ok
 	}
 
+	@inline(__always) private static func checkDebugger() -> ResultSet {
+		#if DEBUG
+		return .ok
+		#else
+		typealias SysCtl = @convention(c) (UnsafeMutablePointer<Int32>, u_int, UnsafeMutableRawPointer, UnsafeMutablePointer<Int>, UnsafeMutableRawPointer?, Int) -> UInt32
+
+		guard let sysctl: SysCtl = lookup(.sysctl) else {
+			return .state
+		}
+
+		var info = kinfo_proc()
+		var mib : [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+		var size = MemoryLayout<kinfo_proc>.stride
+		let status = sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0)
+		guard status == 0 else {
+			return .state
+		}
+		return (info.kp_proc.p_flag & P_TRACED) != 0 ? .debugger : .ok
+		#endif
+	}
+
 	public struct ResultSet: OptionSet {
 		public let rawValue: Int
 
@@ -174,6 +216,7 @@ public enum DeviceIntegrity {
 		public static let syscalls = ResultSet(rawValue: 1 << 4)
 		public static let write = ResultSet(rawValue: 1 << 5)
 		public static let dynamicLib = ResultSet(rawValue: 1 << 6)
+		public static let debugger = ResultSet(rawValue: 1 << 7)
 
 		public init(rawValue: Int) {
 			self.rawValue = rawValue
@@ -187,6 +230,8 @@ public enum DeviceIntegrity {
 		static let system = Function(encoded: "c3lzdGVt")
 		static let dyldImageCount = Function(encoded: "X2R5bGRfaW1hZ2VfY291bnQ=")
 		static let dyldGetImageName = Function(encoded: "X2R5bGRfZ2V0X2ltYWdlX25hbWU=")
+		static let sysctl = Function(encoded: "c3lzY3Rs")
+		static let dlsym = Function(encoded: "ZGxzeW0=")
 
 		let encoded: String
 		var name: String? {

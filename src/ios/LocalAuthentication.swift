@@ -30,6 +30,7 @@ public class LocalAuthentication {
 	private var lastAuthentication: Date = .distantFuture
 	private var lastBackground: Date?
 	public var invalidateAfter: TimeInterval = 10
+	public fileprivate(set) var isAuthenticated = false
 
 	private var defaults: UserDefaults {
 		return UserDefaults.standard
@@ -39,12 +40,14 @@ public class LocalAuthentication {
 			return defaults.bool(forKey: LocalAuthentication.automaticKey)
 		}
 		set {
+			defer {
+				updateAutomaticAuthenticationIfNeeded()
+			}
 			let current = self.automatic
 			guard current != newValue else {
 				return
 			}
 			defaults.set(newValue, forKey: LocalAuthentication.automaticKey)
-			updateAutomaticAuthenticationIfNeeded()
 		}
 	}
 	public var localizedAuthenticationReason: String {
@@ -71,44 +74,34 @@ public class LocalAuthentication {
 		return now > lastBackground.addingTimeInterval(invalidateAfter)
 	}
 
-	public func authenticateAccess(for accessOperation: LAAccessControlOperation, localizedReason reason: String? = nil, handler: @escaping (Result<(Bool, LAContext), Error>) -> ()) {
-		let operation = AuthenticateAccessOperation(localAuth: self)
-		operation.localizedReason = reason ?? context.localizedReason
-		operation.accessOperation = accessOperation
-		if needsAccessInvalidation {
-			operation.addDependency(createInvalidateOperation())
-		}
-		operation.completionBlock = { [unowned operation] in
-			guard let error = operation.error else {
+	public func fetchContextForAccessAuthentication(_ authenticationHandler: @escaping (LAContext) -> Bool) {
+		let operation = BlockOperation {
+			if authenticationHandler(self.context) {
 				self.lastAuthentication = Date()
-				handler(.success((operation.result, self.context)))
-				return
+				self.isAuthenticated = true
 			}
-			handler(.failure(Error(error)))
 		}
+		operation.addDependency(InvalidateOperation(localAuth: self, condition: self.needsAccessInvalidation))
 		enqueue(operation)
 	}
 
-	public func authenticate(localizedReason reason: String? = nil, handler: @escaping (Result<Bool, Error>) -> ()) {
+	public func authenticate(localizedReason reason: String? = nil, completion: @escaping (Result<Bool, Error>) -> ()) {
 		let operation = AuthenticationOperation(localAuth: self)
 		operation.localizedReason = reason ?? context.localizedReason
-		if needsAuthenticationInvalidation {
-			operation.addDependency(createInvalidateOperation())
-		}
-		lastBackground = nil
+		let invalidate = InvalidateOperation(localAuth: self, condition: self.needsAuthenticationInvalidation)
+		operation.addDependency(invalidate)
 		operation.completionBlock = { [unowned operation] in
-			guard let error = operation.error else {
-				self.lastAuthentication = Date()
-				handler(.success(operation.result))
+			guard operation.error == nil else {
+				completion(.failure(Error(operation.error)))
 				return
 			}
-			handler(.failure(Error(error)))
+			completion(.success(operation.result))
 		}
 		enqueue(operation)
 	}
 
 	public func invalidate(completion: @escaping () -> ()) {
-		let operation = createInvalidateOperation()
+		let operation = InvalidateOperation(localAuth: self, condition: true)
 		operation.completionBlock = completion
 		queue.addOperation(operation)
 	}
@@ -128,21 +121,12 @@ public class LocalAuthentication {
 					}
 				}
 			}
-			didEnterBackgroundObserver = Observer(name: UIApplication.didEnterBackgroundNotification, object: UIApplication.shared) { [unowned self] _ in
+			didEnterBackgroundObserver = Observer(name: UIApplication.didEnterBackgroundNotification, object: UIApplication.shared, queue: queue) { [unowned self] _ in
 				self.lastBackground = Date()
 			}
 		} else if !automatic && didBecomeActiveObserver != nil {
 			didBecomeActiveObserver = nil
 			didEnterBackgroundObserver = nil
-		}
-	}
-
-	private func createInvalidateOperation() -> Operation {
-		return BlockOperation {
-			let context = LAContext()
-			context.localizedReason = self.localizedAuthenticationReason
-			self.context.invalidate()
-			self.context = context
 		}
 	}
 
@@ -218,12 +202,11 @@ public class LocalAuthentication {
 		}
 
 		override open func cancel() {
-			isFinished = true
-			isExecuting = false
 			if error == nil {
 				error = .cancelled
 			}
 			super.cancel()
+			stop()
 		}
 
 		func cancel(with error: Error) {
@@ -231,9 +214,13 @@ public class LocalAuthentication {
 			self.cancel()
 		}
 
-		func stop() {
-			isFinished = true
-			isExecuting = false
+		private func stop() {
+			if !isFinished {
+				isFinished = true
+			}
+			if isExecuting {
+				isExecuting = false
+			}
 		}
 	}
 
@@ -252,42 +239,42 @@ public class LocalAuthentication {
 		}
 
 		override func perform(completion: @escaping () -> ()) {
+			guard !localAuth.isAuthenticated else {
+				result = true
+				self.localAuth.lastBackground = nil
+				completion()
+				return
+			}
 			context.evaluatePolicy(policy, localizedReason: localizedReason) { (result, error) in
 				self.result = result
 				self.error = (error != nil) ? Error(error) : nil
+				if result {
+					self.localAuth.lastAuthentication = Date()
+					self.localAuth.isAuthenticated = true
+				}
+				self.localAuth.lastBackground = nil
 				completion()
 			}
 		}
 	}
 
-	class AuthenticateAccessOperation: AsyncOperation {
+	class InvalidateOperation: Operation {
 
 		unowned let localAuth: LocalAuthentication
-		var context: LAContext {
-			return localAuth.context
-		}
-		var accessOperation: LAAccessControlOperation = .useItem
-		var localizedReason: String = "Please authenticate"
-		private(set) var result: Bool = false
+		private let condition: () -> Bool
 
-		init(localAuth: LocalAuthentication) {
+		init(localAuth: LocalAuthentication, condition: @escaping @autoclosure () -> Bool) {
+			self.condition = condition
 			self.localAuth = localAuth
 		}
 
-		override func perform(completion: @escaping () -> ()) {
-			var error: Unmanaged<CFError>? = nil
-			guard let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.userPresence], &error) else {
-				self.error = Error(error?.autorelease().takeUnretainedValue())
-				completion()
-				return
-			}
-			context.evaluateAccessControl(access, operation: accessOperation, localizedReason: localizedReason) { (result, error) in
-				defer { completion() }
-				guard let error = error else {
-					self.result = result
-					return
-				}
-				self.error = Error(error)
+		override func main() {
+			if condition() {
+				let context = LAContext()
+				context.localizedReason = localAuth.localizedAuthenticationReason
+				localAuth.context.invalidate()
+				localAuth.context = context
+				localAuth.isAuthenticated = false
 			}
 		}
 	}

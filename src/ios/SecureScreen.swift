@@ -124,9 +124,9 @@ public class Observer {
 	private var center: NotificationCenter
 	private var observer: NSObjectProtocol
 
-	init(name: Notification.Name, object: Any? = nil, center: NotificationCenter = .default, handler: @escaping (Notification) -> ()) {
+	init(name: Notification.Name, object: Any? = nil, center: NotificationCenter = .default, queue: OperationQueue = .main, handler: @escaping (Notification) -> ()) {
 		self.center = center
-		self.observer = center.addObserver(forName: name, object: object, queue: .main, using: handler)
+		self.observer = center.addObserver(forName: name, object: object, queue: queue, using: handler)
 	}
 
 	deinit {

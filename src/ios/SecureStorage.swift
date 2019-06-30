@@ -32,7 +32,7 @@ public class SecureStorage {
         }
     }
 
-    @inline(__always) private func generateNewBiometricSecuredKey() throws -> SecKey {
+    private func generateNewBiometricSecuredKey() throws -> SecKey {
 		var error: Unmanaged<CFError>? = nil
         guard let access = SecAccessControlCreateWithFlags(kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, accessControlFlags, &error) else {
 			throw Error(error?.autorelease().takeUnretainedValue())
@@ -56,28 +56,14 @@ public class SecureStorage {
         return privateKey
     }
 
-	private func fetchBiometricSecuredKey(completion: @escaping (Result<SecKey, Error>) -> ()) {
-		LocalAuthentication.shared.authenticateAccess(for: .useItem) { result in
-			switch result {
-			case let .success((_, context)):
-				self.fetchKey(using: context, completion: completion)
-			case let .failure(error):
-				completion(.failure(Error(error)))
-			}
-		}
-	}
-
-	@inline(__always) func fetchKey(using context: LAContext, completion: @escaping (Result<SecKey, Error>) -> ()) {
-		DeviceIntegrity.assess { result in
-			guard result == .ok else {
-				completion(.failure(.diar(result)))
-				return
-			}
-			var item: CFTypeRef?
-			var query = self.secretKeyQuery
-			query[kSecUseAuthenticationContext as String] = context
-			let status = SecItemCopyMatching(query as CFDictionary, &item)
-			guard status == errSecSuccess, let key = item else {
+	private func fetchSecretKey(with context: LAContext, completion: @escaping (Result<SecKey, Error>) -> ()) -> Bool {
+		var item: CFTypeRef?
+		var query = self.secretKeyQuery
+		query[kSecUseAuthenticationContext as String] = context
+		let status = SecItemCopyMatching(query as CFDictionary, &item)
+		let success = status == errSecSuccess
+		DispatchQueue.global(qos: .default).async {
+			guard success, let key = item else {
 				do {
 					let key = try self.generateNewBiometricSecuredKey()
 					completion(.success(key))
@@ -87,6 +73,19 @@ public class SecureStorage {
 				return
 			}
 			completion(.success(key as! SecKey))
+		}
+		return success
+	}
+
+	@inline(__always) private func fetchBiometricSecuredKey(completion: @escaping (Result<SecKey, Error>) -> ()) {
+		DeviceIntegrity.assess { result in
+			guard result == .ok else {
+				completion(.failure(.diar(result)))
+				return
+			}
+			LocalAuthentication.shared.fetchContextForAccessAuthentication { context -> Bool in
+				return self.fetchSecretKey(with: context, completion: completion)
+			}
 		}
 	}
     
@@ -100,17 +99,11 @@ public class SecureStorage {
 		fetchBiometricSecuredKey { result in
 			switch result {
 			case let .success(secretKey):
-				DeviceIntegrity.assess() { result in
-					guard result == .ok else {
-						completion(.diar(result))
-						return
-					}
-					do {
-						try self.store(key: key, value: value, using: secretKey)
-						completion(nil)
-					} catch {
-						completion(Error(error))
-					}
+				do {
+					try self.store(key: key, value: value, using: secretKey)
+					completion(nil)
+				} catch {
+					completion(Error(error))
 				}
 			case let .failure(error):
 				completion(Error(error))
@@ -155,17 +148,11 @@ public class SecureStorage {
 		fetchBiometricSecuredKey { result in
 			switch result {
 			case let .success(secretKey):
-				DeviceIntegrity.assess() { result in
-					guard result == .ok else {
-						completion(.failure(.diar(result)))
-						return
-					}
-					do {
-						let value = try self.retrieve(key: key, using: secretKey)
-						completion(.success(value))
-					} catch {
-						completion(.failure(Error(error)))
-					}
+				do {
+					let value = try self.retrieve(key: key, using: secretKey)
+					completion(.success(value))
+				} catch {
+					completion(.failure(Error(error)))
 				}
 			case let .failure(error):
 				completion(.failure(Error(error)))
