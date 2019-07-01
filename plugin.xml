@@ -13,6 +13,7 @@
 				<param name="onload" value="true" />
 			</feature>
 		</config-file>
+		<header-file src="src/ios/SecurityUtils-Bridging-Header.h" />
 		<source-file src="src/ios/SecurityUtilsPlugin.swift"/>
 		<source-file src="src/ios/SecureScreen.swift"/>
 		<source-file src="src/ios/DeviceIntegrity.swift"/>
