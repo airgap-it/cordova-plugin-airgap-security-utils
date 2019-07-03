@@ -1,4 +1,4 @@
-package ch.airgap.securestorage;
+package ch.airgap.securityutils;
 
 import android.app.Activity;
 import android.app.KeyguardManager;
@@ -43,6 +43,7 @@ public class SecurityUtils extends CordovaPlugin {
   @Override
   protected void pluginInitialize() {
     super.pluginInitialize();
+    this.cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     mKeyguardManager = (KeyguardManager) this.cordova.getActivity().getSystemService(Context.KEYGUARD_SERVICE);
     actionMap = new HashMap<>();
     actionMap.put("securestorage_initialize", pair -> securestorage_initialize(pair.first, pair.second));
