@@ -9,6 +9,8 @@ import android.util.Pair;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Consumer;
+
+import android.view.WindowManager;
 import android.widget.Toast;
 import android.provider.Settings;
 
