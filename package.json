@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-airgap-security-utils",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "AirGap Security Utilities",
   "cordova": {
     "id": "cordova-plugin-airgap-security-utils",
