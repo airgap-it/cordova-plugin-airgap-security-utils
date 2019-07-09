@@ -4,8 +4,11 @@ import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.util.Log;
 import android.util.Pair;
+
+import java.util.Date;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Consumer;
@@ -38,6 +41,13 @@ public class SecurityUtils extends CordovaPlugin {
 
   private Map<String, ThrowingConsumer<Pair<JSONArray, CallbackContext>>> actionMap;
 
+  private boolean automaticLocalAuthentication = false;
+  private Date lastBackgroundDate;
+  private int invalidateAfterSeconds = 10;
+  private boolean isAuthenticated = false;
+
+  private SharedPreferences preferences;
+
   public SecurityUtils() {
 
   }
@@ -47,6 +57,8 @@ public class SecurityUtils extends CordovaPlugin {
     super.pluginInitialize();
     this.cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     mKeyguardManager = (KeyguardManager) this.cordova.getActivity().getSystemService(Context.KEYGUARD_SERVICE);
+    preferences = this.cordova.getContext().getSharedPreferences("ch.airgap.securityutils", Context.MODE_PRIVATE);
+    automaticLocalAuthentication = loadAutoAuthenticationValue();
     actionMap = new HashMap<>();
     actionMap.put("securestorage_initialize", pair -> securestorage_initialize(pair.first, pair.second));
     actionMap.put("securestorage_isDeviceSecure", pair -> securestorage_isDeviceSecure(pair.first, pair.second));
@@ -57,6 +69,21 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
     actionMap.put("securestorage_setupParanoiaPassword", pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+    actionMap.put("localauthentication_authenticate", pair -> localauthentication_authenticate(pair.first, pair.second));
+    actionMap.put("localauthentication_setInvalidationTimeout", pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
+    actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
+    actionMap.put("localauthentication_toggleAutomaticAuthentication", pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
+    actionMap.put("localauthentication_setAuthenticationReason", pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
+  }
+
+  private boolean loadAutoAuthenticationValue() {
+    return  preferences.getBoolean("autoauth", false);
+  }
+
+  private void storeAutoAuthenticationValue(boolean value) {
+    SharedPreferences.Editor editor = preferences.edit();
+    editor.putBoolean("autoauth", value);
+    editor.commit();
   }
 
   private Storage getStorageForAlias(String alias, boolean isParanoia) {
@@ -74,7 +101,6 @@ public class SecurityUtils extends CordovaPlugin {
       callbackContext.error(exception.toString());
       Log.e(TAG, exception.toString(), exception);
     }
-
     return true;
   }
 
@@ -215,6 +241,61 @@ public class SecurityUtils extends CordovaPlugin {
     });
   }
 
+  private void localauthentication_authenticate(JSONArray data, CallbackContext callbackContext) throws JSONException {
+      authenticate(result -> {
+          if (result) {
+              callbackContext.success();
+          } else {
+              callbackContext.error("Authentication failed");
+          }
+      });
+  }
+
+  private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    int timeout = data.optInt(0, 10);
+    invalidateAfterSeconds = timeout;
+    callbackContext.success();
+  }
+
+  private void localauthentication_invalidate(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    isAuthenticated = false;
+    lastBackgroundDate = null;
+    callbackContext.success();
+  }
+
+  private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    boolean newValue = data.optBoolean(0, false);
+    if (newValue != automaticLocalAuthentication) {
+      automaticLocalAuthentication = newValue;
+      storeAutoAuthenticationValue(newValue);
+    }
+    callbackContext.success();
+  }
+
+  private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext) throws JSONException {
+      callbackContext.success();
+  }
+
+  private void authenticate(Consumer<Boolean> consumer) {
+      if (!needsAuthentication()) {
+          consumer.accept(true);
+          return;
+      }
+      authErrorCallback = () -> {
+          this.isAuthenticated = false;
+          this.lastBackgroundDate = null;
+          consumer.accept(false);
+          return Unit.INSTANCE;
+      };
+      authSuccessCallback = () -> {
+          this.isAuthenticated = true;
+          this.lastBackgroundDate = null;
+          consumer.accept(true);
+          return Unit.INSTANCE;
+      };
+      showAuthenticationScreen();
+  }
+
   private void showAuthenticationScreen() {
     // Create the Confirm Credentials screen. You can customize the title and
     // description. Or
@@ -240,6 +321,27 @@ public class SecurityUtils extends CordovaPlugin {
         authErrorCallback.invoke();
       }
     }
+  }
+
+  private boolean needsAuthentication() {
+    if (lastBackgroundDate == null) {
+        return !isAuthenticated;
+    }
+    Date now = new Date();
+    isAuthenticated = (lastBackgroundDate.getTime() + (long)(invalidateAfterSeconds * 1000)) >= now.getTime();
+    return !isAuthenticated;
+  }
+
+  @Override
+  public void onResume(boolean multitasking) {
+    if (automaticLocalAuthentication) {
+        authenticate(result -> {});
+    }
+  }
+
+  @Override
+  public  void onPause(boolean multitasking) {
+    lastBackgroundDate = new Date();
   }
 
 }

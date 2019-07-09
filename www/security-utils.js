@@ -146,6 +146,6 @@ SecureStorage.prototype.removeAll = function (successCallback, errorCallback) {
 if (cordova.platformId === 'ios') {
 	exports.SecureScreen = SecureScreen;
 	exports.DeviceIntegrity = DeviceIntegrity;
-	exports.LocalAuthentication = LocalAuthentication;
 }
 exports.SecureStorage = SecureStorage;
+exports.LocalAuthentication = LocalAuthentication;
