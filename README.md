@@ -10,7 +10,7 @@ npm install cordova-plugin-airgap-security-utils --save
 Make sure the plugin is added in your cordova `config.xml` as follows:
 
 ```
-<plugin name="cordova-plugin-airgap-security-utils" spec="0.3.4" />
+<plugin name="cordova-plugin-airgap-security-utils" spec="0.3.5" />
 ```
 
 ## iOS
