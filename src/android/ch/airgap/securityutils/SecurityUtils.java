@@ -19,6 +19,7 @@ import android.provider.Settings;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
+import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -27,6 +28,8 @@ import ch.papers.securestorage.Storage;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
+
+import com.scottyab.rootbeer.RootBeer;
 
 public class SecurityUtils extends CordovaPlugin {
 
@@ -74,6 +77,7 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
     actionMap.put("localauthentication_toggleAutomaticAuthentication", pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
     actionMap.put("localauthentication_setAuthenticationReason", pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
+    actionMap.put("deviceintegrity_assessIntegerity", pair -> deviceintegrity_assessIntegerity(pair.first, pair.second));
   }
 
   private boolean loadAutoAuthenticationValue() {
@@ -305,6 +309,12 @@ public class SecurityUtils extends CordovaPlugin {
       this.cordova.setActivityResultCallback(this);
       this.cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);
     }
+  }
+
+  private void deviceintegrity_assessIntegerity(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    RootBeer rootBeer = new RootBeer(this.cordova.getActivity().getApplicationContext());
+    boolean result = !rootBeer.isRootedWithoutBusyBoxCheck();
+    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
   }
 
   @Override
