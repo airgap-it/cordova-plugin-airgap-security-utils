@@ -59,7 +59,7 @@ import LocalAuthentication
 
 	// MARK: - Device Integrity
 
-	@objc func deviceintegrity_assessIntegerity(_ command: CDVInvokedUrlCommand) {
+	@objc func deviceintegrity_assess(_ command: CDVInvokedUrlCommand) {
 		DeviceIntegrity.assess { assessment in
 			let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: assessment == .ok)
 			self.commandDelegate.send(result, callbackId: command.callbackId)

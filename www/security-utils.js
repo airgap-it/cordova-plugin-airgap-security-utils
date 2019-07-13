@@ -38,7 +38,7 @@ var DeviceIntegrity = {};
 var DeviceIntegrityID = 'deviceintegrity'
 
 DeviceIntegrity.assess = function(callback) {
-	exec(callback, null, PLUGIN_NAME, DeviceIntegrityID + '_assessIntegerity', [])
+	exec(callback, null, PLUGIN_NAME, DeviceIntegrityID + '_assess', [])
 }
 
 /*

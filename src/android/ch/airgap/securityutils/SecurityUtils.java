@@ -77,7 +77,7 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
     actionMap.put("localauthentication_toggleAutomaticAuthentication", pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
     actionMap.put("localauthentication_setAuthenticationReason", pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
-    actionMap.put("deviceintegrity_assessIntegerity", pair -> deviceintegrity_assessIntegerity(pair.first, pair.second));
+    actionMap.put("deviceintegrity_assess", pair -> deviceintegrity_assess(pair.first, pair.second));
   }
 
   private boolean loadAutoAuthenticationValue() {
@@ -128,6 +128,10 @@ public class SecurityUtils extends CordovaPlugin {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
     String key = data.getString(2);
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+      return;
+    }
     this.getStorageForAlias(alias, isParanoia).readString(key, new Function1<String, Unit>() {
       @Override
       public Unit invoke(String s) {
@@ -157,7 +161,10 @@ public class SecurityUtils extends CordovaPlugin {
     boolean isParanoia = data.getBoolean(1);
     String key = data.getString(2);
     String value = data.getString(3);
-
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+      return;
+    }
     this.getStorageForAlias(alias, isParanoia).writeString(key, value, new Function0<Unit>() {
       @Override
       public Unit invoke() {
@@ -311,10 +318,13 @@ public class SecurityUtils extends CordovaPlugin {
     }
   }
 
-  private void deviceintegrity_assessIntegerity(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void deviceintegrity_assess(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, assessIntegrity()));
+  }
+
+  private final boolean assessIntegrity() {
     RootBeer rootBeer = new RootBeer(this.cordova.getActivity().getApplicationContext());
-    boolean result = !rootBeer.isRootedWithoutBusyBoxCheck();
-    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+    return !rootBeer.isRootedWithoutBusyBoxCheck();
   }
 
   @Override
