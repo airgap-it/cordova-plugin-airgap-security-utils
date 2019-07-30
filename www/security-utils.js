@@ -137,6 +137,15 @@ SecureStorage.prototype.removeAll = function (successCallback, errorCallback) {
     exec(successCallback, errorCallback, PLUGIN_NAME, SecureStorageID + "_removeAll", [this.alias, this.isParanoia]);
 }
 
+SecureStorage.prototype.setupParanoiaPassword = function (successCallback, errorCallback) {
+    this.isInitiated = true;
+    exec(successCallback, errorCallback, PLUGIN_NAME, SecureStorageID + "_setupParanoiaPassword", [this.alias, this.isParanoia]);
+}
+
+SecureStorage.prototype.destroy = function (successCallback, errorCallback) {
+    exec(successCallback, errorCallback, PLUGIN_NAME, SecureStorageID + "_destroy");
+}
+
 /*
  ************************
  * EXPORTS				*
