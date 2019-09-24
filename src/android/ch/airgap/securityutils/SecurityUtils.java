@@ -18,6 +18,7 @@ import android.widget.Toast;
 import android.provider.Settings;
 
 import org.apache.cordova.CallbackContext;
+import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
@@ -58,7 +59,6 @@ public class SecurityUtils extends CordovaPlugin {
   @Override
   protected void pluginInitialize() {
     super.pluginInitialize();
-    this.cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     mKeyguardManager = (KeyguardManager) this.cordova.getActivity().getSystemService(Context.KEYGUARD_SERVICE);
     preferences = this.cordova.getContext().getSharedPreferences("ch.airgap.securityutils", Context.MODE_PRIVATE);
     automaticLocalAuthentication = loadAutoAuthenticationValue();
@@ -71,17 +71,46 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
-    actionMap.put("securestorage_setupParanoiaPassword", pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
-    actionMap.put("localauthentication_authenticate", pair -> localauthentication_authenticate(pair.first, pair.second));
-    actionMap.put("localauthentication_setInvalidationTimeout", pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
+    actionMap.put("securestorage_setupParanoiaPassword",
+        pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+    actionMap.put("localauthentication_authenticate",
+        pair -> localauthentication_authenticate(pair.first, pair.second));
+    actionMap.put("localauthentication_setInvalidationTimeout",
+        pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
     actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
-    actionMap.put("localauthentication_toggleAutomaticAuthentication", pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
-    actionMap.put("localauthentication_setAuthenticationReason", pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
+    actionMap.put("localauthentication_toggleAutomaticAuthentication",
+        pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
+    actionMap.put("localauthentication_setAuthenticationReason",
+        pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
     actionMap.put("deviceintegrity_assess", pair -> deviceintegrity_assess(pair.first, pair.second));
+    actionMap.put("securescreen_setWindowSecureFlag", pair -> securescreen_setWindowSecureFlag(pair.first, pair.second));
+    actionMap.put("securescreen_clearWindowSecureFlag", pair -> securescreen_clearWindowSecureFlag(pair.first, pair.second));
+  }
+
+  public void securescreen_setWindowSecureFlag(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    CordovaInterface cordova = this.cordova;
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+      }
+    });
+    callbackContext.success();
+  }
+
+  public void securescreen_clearWindowSecureFlag(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    CordovaInterface cordova = this.cordova;
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        cordova.getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+      }
+    });
+    callbackContext.success();
   }
 
   private boolean loadAutoAuthenticationValue() {
-    return  preferences.getBoolean("autoauth", false);
+    return preferences.getBoolean("autoauth", false);
   }
 
   private void storeAutoAuthenticationValue(boolean value) {
@@ -231,7 +260,8 @@ public class SecurityUtils extends CordovaPlugin {
     }
   }
 
-  private void securestorage_setupParanoiaPassword(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void securestorage_setupParanoiaPassword(JSONArray data, CallbackContext callbackContext)
+      throws JSONException {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
 
@@ -253,16 +283,17 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void localauthentication_authenticate(JSONArray data, CallbackContext callbackContext) throws JSONException {
-      authenticate(result -> {
-          if (result) {
-              callbackContext.success();
-          } else {
-              callbackContext.error("Authentication failed");
-          }
-      });
+    authenticate(result -> {
+      if (result) {
+        callbackContext.success();
+      } else {
+        callbackContext.error("Authentication failed");
+      }
+    });
   }
 
-  private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext)
+      throws JSONException {
     int timeout = data.optInt(0, 10);
     invalidateAfterSeconds = timeout;
     callbackContext.success();
@@ -274,7 +305,8 @@ public class SecurityUtils extends CordovaPlugin {
     callbackContext.success();
   }
 
-  private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext)
+      throws JSONException {
     boolean newValue = data.optBoolean(0, false);
     if (newValue != automaticLocalAuthentication) {
       automaticLocalAuthentication = newValue;
@@ -283,28 +315,29 @@ public class SecurityUtils extends CordovaPlugin {
     callbackContext.success();
   }
 
-  private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext) throws JSONException {
-      callbackContext.success();
+  private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext)
+      throws JSONException {
+    callbackContext.success();
   }
 
   private void authenticate(Consumer<Boolean> consumer) {
-      if (!needsAuthentication()) {
-          consumer.accept(true);
-          return;
-      }
-      authErrorCallback = () -> {
-          this.isAuthenticated = false;
-          this.lastBackgroundDate = null;
-          consumer.accept(false);
-          return Unit.INSTANCE;
-      };
-      authSuccessCallback = () -> {
-          this.isAuthenticated = true;
-          this.lastBackgroundDate = null;
-          consumer.accept(true);
-          return Unit.INSTANCE;
-      };
-      showAuthenticationScreen();
+    if (!needsAuthentication()) {
+      consumer.accept(true);
+      return;
+    }
+    authErrorCallback = () -> {
+      this.isAuthenticated = false;
+      this.lastBackgroundDate = null;
+      consumer.accept(false);
+      return Unit.INSTANCE;
+    };
+    authSuccessCallback = () -> {
+      this.isAuthenticated = true;
+      this.lastBackgroundDate = null;
+      consumer.accept(true);
+      return Unit.INSTANCE;
+    };
+    showAuthenticationScreen();
   }
 
   private void showAuthenticationScreen() {
@@ -345,22 +378,23 @@ public class SecurityUtils extends CordovaPlugin {
 
   private boolean needsAuthentication() {
     if (lastBackgroundDate == null) {
-        return !isAuthenticated;
+      return !isAuthenticated;
     }
     Date now = new Date();
-    isAuthenticated = (lastBackgroundDate.getTime() + (long)(invalidateAfterSeconds * 1000)) >= now.getTime();
+    isAuthenticated = (lastBackgroundDate.getTime() + (long) (invalidateAfterSeconds * 1000)) >= now.getTime();
     return !isAuthenticated;
   }
 
   @Override
   public void onResume(boolean multitasking) {
     if (automaticLocalAuthentication) {
-        authenticate(result -> {});
+      authenticate(result -> {
+      });
     }
   }
 
   @Override
-  public  void onPause(boolean multitasking) {
+  public void onPause(boolean multitasking) {
     lastBackgroundDate = new Date();
   }
 

@@ -5,7 +5,8 @@
   "cordova": {
     "id": "cordova-plugin-airgap-security-utils",
     "platforms": [
-      "ios"
+      "ios",
+      "android"
     ]
   },
   "homepage": "https://github.com/airgap-it/cordova-plugin-airgap-security-utils#readme",
@@ -15,7 +16,8 @@
   },
   "keywords": [
     "ecosystem:cordova",
-    "cordova-ios"
+    "cordova-ios",
+    "cordova-android"
   ],
   "author": "Papers GmbH <contact@papers.ch> (https://papers.ch)"
 }
