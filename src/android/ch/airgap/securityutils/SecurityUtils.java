@@ -5,6 +5,7 @@ import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.util.Log;
 import android.util.Pair;
 
@@ -26,6 +27,7 @@ import org.json.JSONException;
 
 import ch.papers.securestorage.Storage;
 
+import it.airgap.vault.BuildConfig;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
@@ -341,9 +343,6 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void showAuthenticationScreen() {
-    // Create the Confirm Credentials screen. You can customize the title and
-    // description. Or
-    // we will provide a generic one for you if you leave it null
     Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent(null, null);
     if (intent != null) {
       this.cordova.setActivityResultCallback(this);
@@ -356,8 +355,17 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private final boolean assessIntegrity() {
-    RootBeer rootBeer = new RootBeer(this.cordova.getActivity().getApplicationContext());
-    return !rootBeer.isRootedWithoutBusyBoxCheck();
+    Context context = this.cordova.getActivity().getApplicationContext();
+    RootBeer rootBeer = new RootBeer(context);
+    return !rootBeer.isRootedWithoutBusyBoxCheck() && checkNoDebuggable(context);
+  }
+
+  private final boolean checkNoDebuggable(Context context) {
+    if (BuildConfig.DEBUG) {
+      return true;
+    } else {
+      return (context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0;
+    }
   }
 
   @Override
@@ -408,10 +416,6 @@ interface ThrowingConsumer<T> extends Consumer<T> {
     try {
       acceptThrows(elem);
     } catch (final Exception e) {
-      // Implement your own exception handling logic here..
-      // For example:
-      System.out.println("handling an exception...");
-      // Or ...
       throw new RuntimeException(e);
     }
   }
