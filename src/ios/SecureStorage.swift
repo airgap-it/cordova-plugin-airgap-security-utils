@@ -13,71 +13,45 @@ import LocalAuthentication
 public class SecureStorage {
 
     let tag: Data
-    let accessControlFlags: SecAccessControlCreateFlags
-	private var secretKeyQuery: [String: Any] {
-		return [
-			kSecClass as String: kSecClassKey,
-			kSecAttrApplicationTag as String: tag,
-			kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-			kSecReturnRef as String: true
-		]
+	let paranoiaMode: Bool
+	var accessControlFlags: SecAccessControlCreateFlags {
+		var flags: SecAccessControlCreateFlags = LocalAuthentication.defaultAccessFlags()
+		flags.insert(.privateKeyUsage)
+		if (paranoiaMode){
+			flags.insert(.applicationPassword)
+		}
+		return flags
 	}
 
 	public init(tag: Data, paranoiaMode: Bool = false){
         self.tag = tag
-        if (paranoiaMode){
-            accessControlFlags = [.privateKeyUsage, .userPresence, .applicationPassword]
-        } else {
-            accessControlFlags = [.privateKeyUsage, .userPresence]
-        }
+		self.paranoiaMode = paranoiaMode
     }
 
-    private func generateNewBiometricSecuredKey() throws -> SecKey {
-		var error: Unmanaged<CFError>? = nil
-        guard let access = SecAccessControlCreateWithFlags(kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, accessControlFlags, &error) else {
-			throw Error(error?.autorelease().takeUnretainedValue())
-        }
-        
-        let attributes: [String: Any] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeySizeInBits as String: 256,
-            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
-            kSecPrivateKeyAttrs as String: [
-                kSecAttrIsPermanent as String: true,
-                kSecAttrApplicationTag as String: tag,
-                kSecAttrAccessControl as String: access
-            ]
-        ]
-        
-        guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
-			throw Error(error?.autorelease().takeUnretainedValue())
-        }
-        
-        return privateKey
+    private func generateNewBiometricSecuredKey() throws -> Keychain.PrivateKey {
+		return try Keychain.PrivateKey(tag: tag, accessControl: accessControlFlags)
     }
 
-	private func fetchSecretKey(with context: LAContext, completion: @escaping (Result<SecKey, Error>) -> ()) -> Bool {
-		var item: CFTypeRef?
-		var query = self.secretKeyQuery
-		query[kSecUseAuthenticationContext as String] = context
-		let status = SecItemCopyMatching(query as CFDictionary, &item)
-		let success = status == errSecSuccess
-		DispatchQueue.global(qos: .default).async {
-			guard success, let key = item else {
+	private func fetchSecretKey(with context: LAContext, completion: @escaping (Result<Keychain.PrivateKey, Error>) -> ()) -> Bool {
+		let authentication = Keychain.Authentication(context: context, ui: .allow)
+		do {
+			let key = try Keychain.PrivateKey.load(tag: self.tag, authentication: authentication)
+			completion(.success(key))
+			return true
+		} catch {
+			DispatchQueue.global(qos: .default).async {
 				do {
 					let key = try self.generateNewBiometricSecuredKey()
 					completion(.success(key))
 				} catch {
 					completion(.failure(Error(error)))
 				}
-				return
 			}
-			completion(.success(key as! SecKey))
+			return false
 		}
-		return success
 	}
 
-	@inline(__always) private func fetchBiometricSecuredKey(completion: @escaping (Result<SecKey, Error>) -> ()) {
+	@inline(__always) private func fetchBiometricSecuredKey(completion: @escaping (Result<Keychain.PrivateKey, Error>) -> ()) {
 		DeviceIntegrity.assess { result in
 			guard result == .ok else {
 				completion(.failure(.diar(result)))
@@ -90,9 +64,7 @@ public class SecureStorage {
 	}
     
     public func dropSecuredKey() -> Bool {
-        let status = SecItemDelete(secretKeyQuery as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { return false }
-        return true
+        return Keychain.PrivateKey.delete(tag: tag)
     }
 
 	public func store(key: String, value: String, completion: @escaping (Error?) -> ()) {
@@ -111,37 +83,13 @@ public class SecureStorage {
 		}
     }
 
-	private func store(key: String, value: String, using secretKey: SecKey) throws {
-		guard let eCCPublicKey = SecKeyCopyPublicKey(secretKey) else {
-			throw Error.pubKeyCopyFailure
-		}
-
+	private func store(key: String, value: String, using secretKey: Keychain.PrivateKey) throws {
 		guard let messageData = value.data(using: .utf8) else {
 			throw Error.dataConversionFailure
 		}
-
-		var error: Unmanaged<CFError>? = nil
-		guard let encryptedData = SecKeyCreateEncryptedData(eCCPublicKey, .eciesEncryptionStandardX963SHA256AESGCM, messageData as CFData, &error) else {
-			throw Error(error?.autorelease().takeUnretainedValue())
-		}
-
-		let addKeyChainAttributes: [String: Any] = [
-			kSecClass as String: kSecClassGenericPassword,
-			kSecAttrAccount as String: key,
-			kSecValueData as String: encryptedData
-		]
-		var status = SecItemAdd(addKeyChainAttributes as CFDictionary, nil)
-		if status == errSecDuplicateItem {
-			let queryParameters: [String: Any] = [
-				kSecClass as String: kSecClassGenericPassword,
-				kSecAttrAccount as String: key
-			]
-			let updateKeyChainAttributes: [String: Any] = [kSecValueData as String: encryptedData]
-			status = SecItemUpdate(queryParameters as CFDictionary, updateKeyChainAttributes as CFDictionary)
-		}
-		guard status == errSecSuccess || status == errSecItemNotFound else {
-			throw Error.osStatus(status)
-		}
+		let encryptedData = try secretKey.encrypt(data: messageData)
+		let item = Keychain.Password(data: encryptedData, account: key)
+		try item.save()
 	}
 
 	public func retrieve(key: String, completion: @escaping (Result<String, Error>) -> ()) {
@@ -160,50 +108,24 @@ public class SecureStorage {
 		}
 	}
     
-	private func retrieve(key: String, using secretKey: SecKey) throws -> String {
-        var item: CFTypeRef?
-        let queryParameters: [String: Any] = [
-			kSecClass as String: kSecClassGenericPassword,
-			kSecAttrAccount as String: key,
-			kSecReturnData as String: true
-		]
-        let status = SecItemCopyMatching(queryParameters as CFDictionary, &item)
-        guard status == errSecSuccess else {
-			throw Error.osStatus(status)
-		}
-
-		var error: Unmanaged<CFError>? = nil
-        guard let decryptedData = SecKeyCreateDecryptedData(secretKey, .eciesEncryptionStandardX963SHA256AESGCM, item as! CFData, &error) else {
-			throw Error(error?.autorelease().takeUnretainedValue())
-        }
-        
+	private func retrieve(key: String, using secretKey: Keychain.PrivateKey) throws -> String {
+        let item = try Keychain.Password.load(account: key)
+		let decryptedData = try secretKey.decrypt(data: item.data)
 		guard let result = String(data: decryptedData as Data, encoding: .utf8) else {
 			throw Error.stringConversionFailure
 		}
-
 		return result
     }
 
 	public func delete(key: String) throws {
-		let queryParameters: [String: Any] = [
-			kSecClass as String: kSecClassGenericPassword,
-			kSecAttrAccount as String: key,
-			kSecReturnData as String: true
-		]
-		let status = SecItemDelete(queryParameters as CFDictionary)
-
-		guard status == errSecSuccess else {
-			throw Error.osStatus(status)
-		}
+		try Keychain.Password.delete(account: key)
 	}
 
 	public enum Error: Swift.Error {
 		case unknown
 		case `internal`(Swift.Error)
-		case pubKeyCopyFailure
 		case dataConversionFailure
 		case stringConversionFailure
-		case osStatus(OSStatus)
 		case diar(DeviceIntegrity.ResultSet)
 
 		init(_ error: Swift.Error?) {

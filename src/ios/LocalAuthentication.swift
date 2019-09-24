@@ -12,8 +12,12 @@ import LocalAuthentication
 public class LocalAuthentication {
 
 	public static let shared = LocalAuthentication()
+
 	private static var automaticKey = "local_auth_automatic"
 	private static var authenticationReasonKey = "local_auth_reason"
+	private static var localAuthenticationKey = "local_authentication_key"
+	private static var policyStateKey = "policy_state_key"
+	private static var localAuthenticationData = { return "local_authentication".data(using: .utf8)! }()
 	private static var defaultAuthenticationReason = "Please authenticate to continue to use the app."
 
 	private lazy var context: LAContext = {
@@ -21,20 +25,20 @@ public class LocalAuthentication {
 		result.localizedReason = self.localizedAuthenticationReason
 		return result
 	}()
+
 	private var queue: OperationQueue = {
 		let result = OperationQueue()
 		result.maxConcurrentOperationCount = 1
 		result.name = "ch.papers.security-utils.LocalAuthentication"
 		return result
 	}()
+
 	private var lastAuthentication: Date = .distantFuture
 	private var lastBackground: Date?
 	public var invalidateAfter: TimeInterval = 10
 	public fileprivate(set) var isAuthenticated = false
 
-	private var defaults: UserDefaults {
-		return UserDefaults.standard
-	}
+	private var defaults: UserDefaults { return UserDefaults.standard }
 	public var automatic: Bool {
 		get {
 			return defaults.bool(forKey: LocalAuthentication.automaticKey)
@@ -50,6 +54,18 @@ public class LocalAuthentication {
 			defaults.set(newValue, forKey: LocalAuthentication.automaticKey)
 		}
 	}
+
+	private var currentBiometrySate: Data? {
+		get { return defaults.data(forKey: LocalAuthentication.policyStateKey) }
+		set {
+			let currentValue = currentBiometrySate
+			guard newValue != nil && newValue != currentValue else {
+				return
+			}
+			defaults.set(newValue, forKey: LocalAuthentication.policyStateKey)
+		}
+	}
+
 	public var localizedAuthenticationReason: String {
 		get {
 			return defaults.string(forKey: LocalAuthentication.authenticationReasonKey) ?? LocalAuthentication.defaultAuthenticationReason
@@ -59,19 +75,30 @@ public class LocalAuthentication {
 			context.localizedReason = newValue
 		}
 	}
+
 	private var didBecomeActiveObserver: Observer?
 	private var didEnterBackgroundObserver: Observer?
+	private var needsAccessInvalidation: Bool { return Date() > lastAuthentication.addingTimeInterval(invalidateAfter) }
 
-	private var needsAccessInvalidation: Bool {
-		let now = Date()
-		return now > lastAuthentication.addingTimeInterval(invalidateAfter)
-	}
 	private var needsAuthenticationInvalidation: Bool {
 		guard let lastBackground = self.lastBackground else {
 			return false
 		}
 		let now = Date()
 		return now > lastBackground.addingTimeInterval(invalidateAfter)
+	}
+
+	public static func defaultAccessFlags() -> SecAccessControlCreateFlags {
+		return [.userPresence]
+	}
+
+	private static func canUseBiometrics(with context: LAContext = LAContext()) -> Bool {
+		var error: NSError?
+		var canUseBiometrics = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+		if !canUseBiometrics, let error = error as? LAError {
+			canUseBiometrics = LAError.Code(rawValue: error.errorCode) == .biometryLockout ? true : canUseBiometrics
+		}
+		return canUseBiometrics
 	}
 
 	public func fetchContextForAccessAuthentication(_ authenticationHandler: @escaping (LAContext) -> Bool) {
@@ -227,10 +254,7 @@ public class LocalAuthentication {
 	class AuthenticationOperation: AsyncOperation {
 
 		unowned let localAuth: LocalAuthentication
-		var context: LAContext {
-			return localAuth.context
-		}
-		var policy: LAPolicy = .deviceOwnerAuthentication
+		var context: LAContext { return localAuth.context }
 		var localizedReason: String = "Please authenticate"
 		private(set) var result: Bool = false
 
@@ -245,15 +269,47 @@ public class LocalAuthentication {
 				completion()
 				return
 			}
-			context.evaluatePolicy(policy, localizedReason: localizedReason) { (result, error) in
-				self.result = result
-				self.error = (error != nil) ? Error(error) : nil
-				if result {
-					self.localAuth.lastAuthentication = Date()
-					self.localAuth.isAuthenticated = true
+
+			do {
+				try authenticate()
+				result = true
+				self.localAuth.lastAuthentication = Date()
+				self.localAuth.isAuthenticated = true
+			} catch {
+				self.error = Error(error)
+				result = false
+			}
+			self.localAuth.lastBackground = nil
+			completion()
+		}
+
+		private func authenticate(savePolicyState: Bool = false) throws {
+			do {
+				let authentication = Keychain.Authentication(context: context, ui: .allow, promptMessage: localizedReason)
+				_ = try Keychain.Password.load(account: LocalAuthentication.localAuthenticationKey, includeData: false, authentication: authentication)
+				if savePolicyState {
+					localAuth.currentBiometrySate = context.evaluatedPolicyDomainState
 				}
-				self.localAuth.lastBackground = nil
-				completion()
+			} catch {
+				guard
+					let keychainError = error as? Keychain.Error,
+					case let .osStatus(status) = keychainError,
+					status == errSecItemNotFound else {
+
+						throw error
+				}
+				let flags = LocalAuthentication.defaultAccessFlags()
+				let item = Keychain.Password(
+					data: LocalAuthentication.localAuthenticationData,
+					account: LocalAuthentication.localAuthenticationKey,
+					accessControl: flags
+				)
+				try item.save()
+				if #available(iOS 11.3, *) {
+					try authenticate(savePolicyState: flags.contains(.biometryCurrentSet))
+				} else {
+					try authenticate(savePolicyState: flags.contains(.touchIDCurrentSet))
+				}
 			}
 		}
 	}
@@ -264,18 +320,19 @@ public class LocalAuthentication {
 		private let condition: () -> Bool
 
 		init(localAuth: LocalAuthentication, condition: @escaping @autoclosure () -> Bool) {
-			self.condition = condition
 			self.localAuth = localAuth
+			self.condition = condition
 		}
 
 		override func main() {
-			if condition() {
-				let context = LAContext()
-				context.localizedReason = localAuth.localizedAuthenticationReason
-				localAuth.context.invalidate()
-				localAuth.context = context
-				localAuth.isAuthenticated = false
+			guard condition() else {
+				return
 			}
+			let context = LAContext()
+			context.localizedReason = localAuth.localizedAuthenticationReason
+			localAuth.context.invalidate()
+			localAuth.context = context
+			localAuth.isAuthenticated = false
 		}
 	}
 }

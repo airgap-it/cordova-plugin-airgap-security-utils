@@ -18,7 +18,8 @@
 		<source-file src="src/ios/SecureScreen.swift"/>
 		<source-file src="src/ios/DeviceIntegrity.swift"/>
 		<source-file src="src/ios/SecureStorage.swift"/>
-    <source-file src="src/ios/LocalAuthentication.swift"/>
+    	<source-file src="src/ios/LocalAuthentication.swift"/>
+		<source-file src="src/ios/Keychain.swift"/>
 	</platform>
 	<!-- Android -->
     <platform name="android">
