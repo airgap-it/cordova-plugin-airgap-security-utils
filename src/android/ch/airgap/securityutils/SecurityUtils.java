@@ -6,13 +6,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.support.v4.util.Consumer;
 import android.util.Log;
 import android.util.Pair;
 
 import java.util.Date;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.function.Consumer;
 
 import android.view.WindowManager;
 import android.widget.Toast;
