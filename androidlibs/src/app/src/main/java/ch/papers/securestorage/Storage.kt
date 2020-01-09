@@ -76,29 +76,19 @@ class Storage(private val context: Context, private val storageAlias: String, pr
 
     }
 
-    fun readString(fileKey: String, success: (String) -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
-        val secureFileStorage = SecureFileStorage(this.getMasterKey(Cipher.DECRYPT_MODE), salt, baseDir)
-
-        val successCb: (InputStream) -> Unit = { inputStream ->
-            val fileValue = inputStream.readTextAndClose()
-            success(fileValue)
-        }
+    fun readString(fileKey: String, success: (String) -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+        val secureFileStorage = SecureFileStorage(getMasterKey(Cipher.DECRYPT_MODE), salt, baseDir)
 
         if (isParanoia) {
             this.setupParanoiaPassword(success = {
                 showParanoiaAlert(success = { secret ->
-                    try {
-                        val digest = retrieveParanoiaSecret(secret)
-                        secureFileStorage.read(fileKey = fileKey, secret = digest, success = successCb, error = error, requestAuthentication = requestAuthentication)
-                    } catch (e: BadPaddingException) {
-                        error(Exception("wrong secret"))
-                    }
+                    val digest = retrieveParanoiaSecret(secret)
+                    secureFileStorage.read(fileKey = fileKey, secret = digest, success = success, error = error, requestAuthentication = requestAuthentication)
                 }, error = error)
             }, error = error)
         } else {
-            secureFileStorage.read(fileKey = fileKey, success = successCb, error = error, requestAuthentication = requestAuthentication)
+            secureFileStorage.read(fileKey = fileKey, success = success, error = error, requestAuthentication = requestAuthentication)
         }
-
     }
 
     private fun showParanoiaAlert(success: (String) -> Unit, error: (error: Exception) -> Unit) {
@@ -192,8 +182,8 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         }
     }
 
-    fun writeString(fileKey: String, fileData: String, success: () -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
-        val secureFileStorage = SecureFileStorage(this.getMasterKey(Cipher.ENCRYPT_MODE), salt, baseDir)
+    fun writeString(fileKey: String, fileData: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+        val secureFileStorage = SecureFileStorage(getMasterKey(Cipher.ENCRYPT_MODE), salt, baseDir)
 
         val successCb: (OutputStream) -> Unit = { outputStream ->
             outputStream.write(fileData.toByteArray())
@@ -205,12 +195,8 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         if (isParanoia) {
             this.setupParanoiaPassword(success = {
                 showParanoiaAlert(success = { secret ->
-                    try {
-                        val digest = retrieveParanoiaSecret(secret)
-                        secureFileStorage.write(fileKey = fileKey, secret = digest, success = successCb, error = error, requestAuthentication = requestAuthentication)
-                    } catch (e: BadPaddingException) {
-                        error(Exception("wrong secret"))
-                    }
+                    val digest = retrieveParanoiaSecret(secret)
+                    secureFileStorage.write(fileKey = fileKey, secret = digest, success = successCb, error = error, requestAuthentication = requestAuthentication)
                 }, error = error)
             }, error = error)
         } else {
@@ -221,10 +207,6 @@ class Storage(private val context: Context, private val storageAlias: String, pr
     fun removeString(fileKey: String, success: () -> Unit, error: (error: Exception) -> Unit) {
         val secureFileStorage = SecureFileStorage(this.getMasterKey(Cipher.DECRYPT_MODE), salt, baseDir)
         secureFileStorage.remove(fileKey = fileKey, success = success, error = error)
-    }
-
-    private fun InputStream.readTextAndClose(charset: Charset = Charsets.UTF_8): String {
-        return this.bufferedReader(charset).use { it.readText() }
     }
 
     private fun generateSalt(saltFile: File) {

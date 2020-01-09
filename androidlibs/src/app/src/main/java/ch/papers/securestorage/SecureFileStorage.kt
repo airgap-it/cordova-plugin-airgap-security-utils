@@ -3,8 +3,10 @@ package ch.papers.securestorage
 import android.os.Build
 import android.security.keystore.UserNotAuthenticatedException
 import java.io.*
+import java.nio.charset.Charset
 import java.security.Key
 import java.security.MessageDigest
+import javax.crypto.BadPaddingException
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
@@ -17,7 +19,7 @@ import kotlin.concurrent.thread
  */
 class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteArray, private val baseDir: File) {
 
-    fun read(fileKey: String, secret: ByteArray = "".toByteArray(), success: (InputStream) -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+    fun read(fileKey: String, secret: ByteArray = "".toByteArray(), success: (String) -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         thread {
             try {
                 val fileInputStream = FileInputStream(fileForHashedKey(hashForKey(fileKey)))
@@ -51,13 +53,18 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
 
                 val secretCipherInputStream = CipherInputStream(fsCipherInputStream, specificSecretCipher)
 
-                success(secretCipherInputStream)
+                val fileValue = secretCipherInputStream.readTextAndClose()
+                success(fileValue)
+            } catch (e: IOException) {
+                if (e.isSecurityError) {
+                    error(Exception("Wrong master key, could not decrypt the data."))
+                } else {
+                    error(e)
+                }
             } catch (e: Exception) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (e is UserNotAuthenticatedException) {
-                        requestAuthentication({
-                            read(fileKey, secret, success, error, requestAuthentication)
-                        })
+                        requestAuthentication { read(fileKey, secret, success, error, requestAuthentication) }
                     } else {
                         error(e)
                     }
@@ -105,12 +112,16 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
                 val secretCipherOutputStream = CipherOutputStream(fsCipherOutputStream, specificSecretCipher)
 
                 success(secretCipherOutputStream)
+            } catch (e: IOException) {
+                if (e.isSecurityError) {
+                    error(Exception("Wrong master key, could not encrypt the data."))
+                } else {
+                    error(e)
+                }
             } catch (e: Exception) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (e is UserNotAuthenticatedException) {
-                        requestAuthentication({
-                            write(fileKey, secret, success, error, requestAuthentication)
-                        })
+                        requestAuthentication { write(fileKey, secret, success, error, requestAuthentication) }
                     } else {
                         error(e)
                     }
@@ -161,4 +172,10 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
         return stringBuilder.toString()
     }
 
+    private fun InputStream.readTextAndClose(charset: Charset = Charsets.UTF_8): String {
+        return this.bufferedReader(charset).use { it.readText() }
+    }
+
+    private val IOException.isSecurityError: Boolean
+        get() = cause is BadPaddingException
 }
