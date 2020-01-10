@@ -221,6 +221,24 @@ SecureStorage.prototype.setItem = function(
   )
 }
 
+SecureStorage.prototype.setRecoverableItem = function(
+  key,
+  item,
+  successCallback,
+  errorCallback
+) {
+  if (!this.isInitiated) {
+    return errorCallback("call initialize() first.")
+  }
+  exec(
+    successCallback,
+    errorCallback,
+    PLUGIN_NAME,
+    SecureStorageID + "_setRecoverableItem",
+    [this.alias, this.isParanoia, key, item]
+  )
+}
+
 SecureStorage.prototype.getItem = function(
   key,
   successCallback,
@@ -235,6 +253,24 @@ SecureStorage.prototype.getItem = function(
     PLUGIN_NAME,
     SecureStorageID + "_getItem",
     [this.alias, this.isParanoia, key]
+  )
+}
+
+SecureStorage.prototype.recoverItem = function(
+  key,
+  recoveryString,
+  successCallback,
+  errorCallback
+) {
+  if (!this.isInitiated) {
+    return errorCallback("call initialize() first.")
+  }
+  exec(
+    successCallback,
+    errorCallback,
+    PLUGIN_NAME,
+    SecureStorageID + "_recoverItem",
+    [this.alias, this.isParanoia, key, recoveryString]
   )
 }
 

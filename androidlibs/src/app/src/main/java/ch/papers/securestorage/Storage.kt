@@ -10,13 +10,13 @@ import android.security.keystore.KeyProperties
 import android.support.v7.app.AlertDialog
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Base64
 import android.util.Log
 import android.view.LayoutInflater
 import android.widget.EditText
 import java.io.*
 import java.math.BigInteger
 import java.nio.ByteBuffer
-import java.nio.charset.Charset
 import java.security.*
 import java.util.*
 import javax.crypto.*
@@ -80,15 +80,43 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         val secureFileStorage = SecureFileStorage(getMasterKey(Cipher.DECRYPT_MODE), salt, baseDir)
 
         if (isParanoia) {
-            this.setupParanoiaPassword(success = {
-                showParanoiaAlert(success = { secret ->
-                    val digest = retrieveParanoiaSecret(secret)
-                    secureFileStorage.read(fileKey = fileKey, secret = digest, success = success, error = error, requestAuthentication = requestAuthentication)
-                }, error = error)
-            }, error = error)
+            this.setupParanoiaPassword(
+                    success = {
+                        showParanoiaAlert(
+                                success = { secret ->
+                                    val digest = retrieveParanoiaSecret(secret)
+                                    secureFileStorage.read(
+                                            fileKey = fileKey,
+                                            secret = digest,
+                                            success = success,
+                                            error = error,
+                                            requestAuthentication = requestAuthentication
+                                    )
+                                }, error = error)
+                    }, error = error
+            )
         } else {
-            secureFileStorage.read(fileKey = fileKey, success = success, error = error, requestAuthentication = requestAuthentication)
+            secureFileStorage.read(
+                    fileKey = fileKey,
+                    success = success,
+                    error = error,
+                    requestAuthentication = requestAuthentication
+            )
         }
+    }
+
+    fun recoverString(fileKey: String, recoveryString: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+        val (recoveryBytes, recoverySalt) = Base64.decode(recoveryString, Base64.NO_WRAP).divide(Constants.RECOVERY_KEY_SIZE)
+        val recoveryKey = generateSecretKey(recoveryBytes.toHexString(), recoverySalt)
+
+        val secureFileStorage = SecureFileStorage(recoveryKey, salt, baseDir)
+
+        secureFileStorage.read(
+                fileKey = "${fileKey}${Constants.RECOVERY_FILE_KEY_SUFFIX}",
+                success = { writeString(fileKey, it, success, error, requestAuthentication) },
+                error = error,
+                requestAuthentication = requestAuthentication
+        )
     }
 
     private fun showParanoiaAlert(success: (String) -> Unit, error: (error: Exception) -> Unit) {
@@ -185,23 +213,48 @@ class Storage(private val context: Context, private val storageAlias: String, pr
     fun writeString(fileKey: String, fileData: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         val secureFileStorage = SecureFileStorage(getMasterKey(Cipher.ENCRYPT_MODE), salt, baseDir)
 
-        val successCb: (OutputStream) -> Unit = { outputStream ->
-            outputStream.write(fileData.toByteArray())
-            outputStream.flush()
-            outputStream.close()
-            success()
-        }
-
         if (isParanoia) {
-            this.setupParanoiaPassword(success = {
-                showParanoiaAlert(success = { secret ->
-                    val digest = retrieveParanoiaSecret(secret)
-                    secureFileStorage.write(fileKey = fileKey, secret = digest, success = successCb, error = error, requestAuthentication = requestAuthentication)
-                }, error = error)
-            }, error = error)
+            this.setupParanoiaPassword(
+                    success = {
+                        showParanoiaAlert(
+                                success = { secret ->
+                                    val digest = retrieveParanoiaSecret(secret)
+                                    secureFileStorage.write(
+                                            fileKey = fileKey,
+                                            fileData = fileData,
+                                            secret = digest,
+                                            success = success,
+                                            error = error,
+                                            requestAuthentication = requestAuthentication)
+                                }, error = error)
+                    }, error = error
+            )
         } else {
-            secureFileStorage.write(fileKey = fileKey, success = successCb, error = error, requestAuthentication = requestAuthentication)
+            secureFileStorage.write(
+                    fileKey = fileKey,
+                    fileData = fileData,
+                    success = success,
+                    error = error,
+                    requestAuthentication = requestAuthentication
+            )
         }
+    }
+
+    fun writeRecoverableString(fileKey: String, fileData: String, success: (String) -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+        val recoveryBytes = ByteArray(Constants.RECOVERY_KEY_SIZE).also { SecureRandom().nextBytes(it) }
+        val recoverySalt = ByteArray(Constants.RECOVERY_KEY_SALT_SIZE).also { SecureRandom().nextBytes(it) }
+
+        val recoveryString = Base64.encodeToString(recoveryBytes + recoverySalt, Base64.NO_WRAP)
+        val recoveryKey = generateSecretKey(recoveryBytes.toHexString(), recoverySalt)
+
+        val secureFileStorage = SecureFileStorage(recoveryKey, salt, baseDir)
+        secureFileStorage.write(
+                fileKey = "${fileKey}${Constants.RECOVERY_FILE_KEY_SUFFIX}",
+                fileData = fileData,
+                success = { success(recoveryString) },
+                error = error,
+                requestAuthentication = requestAuthentication
+        )
     }
 
     fun removeString(fileKey: String, success: () -> Unit, error: (error: Exception) -> Unit) {
@@ -244,18 +297,14 @@ class Storage(private val context: Context, private val storageAlias: String, pr
     }
 
     private fun generateParanoiaKey(passphraseOrPin: String) {
-        val salt = ByteArray(Constants.KEY_SIZE / 8)
-        SecureRandom().nextBytes(salt)
-
-        val secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM)
-        val keySpec = PBEKeySpec(passphraseOrPin.toCharArray(), salt, Constants.PBKDF2_ITERATIONS, Constants.PBKDF2_OUTPUT_KEY_LENGTH)
-        val inputSecretKey = secretKeyFactory.generateSecret(keySpec)
+        val salt = ByteArray(Constants.KEY_SIZE / 8).also { SecureRandom().nextBytes(it) }
+        val inputSecretKey = generateSecretKey(passphraseOrPin, salt)
 
         val keyGen = KeyGenerator.getInstance("AES")
         keyGen.init(Constants.KEY_SIZE)
 
         val masterSecretKey = keyGen.generateKey()
-        val masterSecretKeyBytes = masterSecretKey!!.encoded
+        val masterSecretKeyBytes = masterSecretKey.encoded
 
         val messageDigest = MessageDigest.getInstance(Constants.DIGEST_ALGORITHM)
         val masterSecretKeyDigest = messageDigest.digest(salt + masterSecretKeyBytes)
@@ -276,6 +325,13 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         } catch (e: Exception) {
             Log.e("Storage", e.toString())
         }
+    }
+
+    private fun generateSecretKey(password: String, salt: ByteArray): Key {
+        val secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM)
+        val keySpec = PBEKeySpec(password.toCharArray(), salt, Constants.PBKDF2_ITERATIONS, Constants.PBKDF2_OUTPUT_KEY_LENGTH)
+
+        return secretKeyFactory.generateSecret(keySpec)
     }
 
     private fun retrieveParanoiaSecret(passphraseOrPin: String): ByteArray {
@@ -335,8 +391,12 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         })
     }
 
-    companion object {
+    private fun ByteArray.divide(pivot: Int, inclusive: Boolean = false): Pair<ByteArray, ByteArray> {
+        val pivot = if (inclusive) pivot + 1 else pivot
+        return Pair(sliceArray(0 until pivot), sliceArray(pivot until size))
+    }
 
+    companion object {
         /**
          * Removes all stored items in a specific alias
          */

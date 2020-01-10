@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
  */
 class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteArray, private val baseDir: File) {
 
-    fun read(fileKey: String, secret: ByteArray = "".toByteArray(), success: (String) -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+    fun read(fileKey: String, secret: ByteArray = "".toByteArray(), success: (String) -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         thread {
             try {
                 val fileInputStream = FileInputStream(fileForHashedKey(hashForKey(fileKey)))
@@ -75,7 +75,7 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
         }
     }
 
-    fun write(fileKey: String, secret: ByteArray = "".toByteArray(), success: (OutputStream) -> Unit, error: (error: Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+    fun write(fileKey: String, fileData: String, secret: ByteArray = "".toByteArray(), success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         thread {
             try {
                 val file = fileForHashedKey(hashForKey(fileKey))
@@ -109,9 +109,12 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
 
                 specificSecretCipher.init(Cipher.ENCRYPT_MODE, specificSecretKey, IvParameterSpec(ivForKey(fileKey)))
 
-                val secretCipherOutputStream = CipherOutputStream(fsCipherOutputStream, specificSecretCipher)
+                CipherOutputStream(fsCipherOutputStream, specificSecretCipher).use {
+                    it.write(fileData.toByteArray())
+                    it.flush()
+                }
 
-                success(secretCipherOutputStream)
+                success()
             } catch (e: IOException) {
                 if (e.isSecurityError) {
                     error(Exception("Wrong master key, could not encrypt the data."))
@@ -121,7 +124,7 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
             } catch (e: Exception) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (e is UserNotAuthenticatedException) {
-                        requestAuthentication { write(fileKey, secret, success, error, requestAuthentication) }
+                        requestAuthentication { write(fileKey, fileData, secret, success, error, requestAuthentication) }
                     } else {
                         error(e)
                     }
@@ -161,15 +164,7 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
     }
 
     private fun fileForHashedKey(hashedKey: ByteArray): File {
-        return File(baseDir, hexForByteArray(hashedKey))
-    }
-
-    private fun hexForByteArray(hash: ByteArray): String {
-        val stringBuilder = StringBuilder(hash.size * 2)
-        for (b in hash) {
-            stringBuilder.append(String.format("%02x", b))
-        }
-        return stringBuilder.toString()
+        return File(baseDir, hashedKey.toHexString())
     }
 
     private fun InputStream.readTextAndClose(charset: Charset = Charsets.UTF_8): String {

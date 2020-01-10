@@ -69,21 +69,23 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_isDeviceSecure", pair -> securestorage_isDeviceSecure(pair.first, pair.second));
     actionMap.put("securestorage_secureDevice", pair -> securestorage_secureDevice(pair.first, pair.second));
     actionMap.put("securestorage_getItem", pair -> securestorage_getItem(pair.first, pair.second));
+    actionMap.put("securestorage_recoverItem", pair -> securestorage_recoverItem(pair.first, pair.second));
     actionMap.put("securestorage_setItem", pair -> securestorage_setItem(pair.first, pair.second));
-    actionMap.put("securestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
+    actionMap.put("securestorage_setRecoverableItem", pair -> securestorage_setRecoverableItem(pair.first, pair.second));
+    actionMap.put("secuarestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
     actionMap.put("securestorage_setupParanoiaPassword",
-        pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+            pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
     actionMap.put("localauthentication_authenticate",
-        pair -> localauthentication_authenticate(pair.first, pair.second));
+            pair -> localauthentication_authenticate(pair.first, pair.second));
     actionMap.put("localauthentication_setInvalidationTimeout",
-        pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
+            pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
     actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
     actionMap.put("localauthentication_toggleAutomaticAuthentication",
-        pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
+            pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
     actionMap.put("localauthentication_setAuthenticationReason",
-        pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
+            pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
     actionMap.put("deviceintegrity_assess", pair -> deviceintegrity_assess(pair.first, pair.second));
     actionMap.put("securescreen_setWindowSecureFlag", pair -> securescreen_setWindowSecureFlag(pair.first, pair.second));
     actionMap.put("securescreen_clearWindowSecureFlag", pair -> securescreen_clearWindowSecureFlag(pair.first, pair.second));
@@ -187,6 +189,29 @@ public class SecurityUtils extends CordovaPlugin {
     });
   }
 
+  private void securestorage_recoverItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    String alias = data.getString(0);
+    boolean isParanoia = data.getBoolean(1);
+    String key = data.getString(2);
+    String recoveryString = data.getString(3);
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+    }
+    this.getStorageForAlias(alias, isParanoia).recoverString(key, recoveryString, () -> {
+      Log.d(TAG, "recovered successfully");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "recovered unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
+      return Unit.INSTANCE;
+    });
+  }
+
   private void securestorage_setItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
@@ -217,6 +242,30 @@ public class SecurityUtils extends CordovaPlugin {
         showAuthenticationScreen();
         return Unit.INSTANCE;
       }
+    });
+  }
+
+  private void securestorage_setRecoverableItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    String alias = data.getString(0);
+    boolean isParanoia = data.getBoolean(1);
+    String key = data.getString(2);
+    String value = data.getString(3);
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+      return;
+    }
+    this.getStorageForAlias(alias, isParanoia).writeRecoverableString(key, value, recoveryKey -> {
+      Log.d(TAG,"written recoverable successfully, recovery key: " + recoveryKey);
+      callbackContext.success(recoveryKey);
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "written recoverable unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
+      return Unit.INSTANCE;
     });
   }
 
@@ -263,7 +312,7 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void securestorage_setupParanoiaPassword(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+          throws JSONException {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
 
@@ -295,7 +344,7 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+          throws JSONException {
     int timeout = data.optInt(0, 10);
     invalidateAfterSeconds = timeout;
     callbackContext.success();
@@ -308,7 +357,7 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+          throws JSONException {
     boolean newValue = data.optBoolean(0, false);
     if (newValue != automaticLocalAuthentication) {
       automaticLocalAuthentication = newValue;
@@ -318,7 +367,7 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+          throws JSONException {
     callbackContext.success();
   }
 
