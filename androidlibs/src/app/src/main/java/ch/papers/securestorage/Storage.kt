@@ -47,7 +47,7 @@ class Storage(private val context: Context, private val storageAlias: String, pr
 
         val keyStoreAlias = generateKeyStoreAlias(storageAlias)
 
-        Log.d("SecureStorage", "Creating Alias " + storageAlias)
+        Log.d("SecureStorage", "Creating Alias $storageAlias")
 
         // loading default Android KeyStore for Secure Key Management
         keyStore.load(null)
@@ -128,10 +128,10 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         val editText = editView.findViewById<EditText>(R.id.password)
 
         builder.setView(editView)
-        builder.setPositiveButton(R.string.paranoia_input_alert_unlock_button, DialogInterface.OnClickListener { dialog, id ->
+        builder.setPositiveButton(R.string.paranoia_input_alert_unlock_button) { dialog, id ->
             success(editText.text.toString())
             dialog.dismiss()
-        })
+        }
 
         val dialog = builder.create()
 
@@ -171,39 +171,35 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         val confirmText = editView.findViewById<EditText>(R.id.password_confirmation)
 
         builder.setView(editView)
-        builder.setPositiveButton(R.string.paranoia_input_alert_positive_button, DialogInterface.OnClickListener { dialog, id ->
+        builder.setPositiveButton(R.string.paranoia_input_alert_positive_button) { dialog, id ->
             dialog.cancel()
             if (passwordText.text.toString() == confirmText.text.toString()) {
                 success(passwordText.text.toString())
             }
-        })
+        }
 
         val dialog = builder.create()
 
-        confirmText.afterTextChanged({ text: String ->
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(
-                    text == passwordText.text.toString() && text.length >= 4
-            )
-        })
+        confirmText.afterTextChanged { text: String ->
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = (text == passwordText.text.toString() && text.length >= 4)
+        }
 
-        passwordText.afterTextChanged({ text: String ->
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(
-                    text == confirmText.text.toString() && text.length >= 4
-            )
-        })
+        passwordText.afterTextChanged { text: String ->
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = (text == confirmText.text.toString() && text.length >= 4)
+        }
 
         dialog.show()
     }
 
-    fun setupParanoiaPassword(success: () -> Unit, error: (error: Exception) -> Unit) {
+    fun setupParanoiaPassword(success: () -> Unit, error: (Exception) -> Unit) {
         val paranoiaFile = File(baseDir, Constants.PARANOIA_KEY_FILE_NAME)
         if (!paranoiaFile.exists()) {
             showParanoiaSetupAlert({ password ->
                 generateParanoiaKey(password)
                 success()
-            }, { error ->
-                Log.d("Storage", "paranoia setup failed." + error.message)
-                error(error)
+            }, { e ->
+                Log.d("Storage", "paranoia setup failed." + e.message)
+                error(e)
             })
         } else {
             success()
@@ -285,9 +281,9 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
             val spec = KeyPairGeneratorSpec.Builder(context).setAlias(alias).setSubject(
                     X500Principal(String.format("CN=%s, OU=%s", alias,
-                            this.context.getPackageName())))
+                            this.context.packageName)))
                     .setSerialNumber(BigInteger.ONE).setStartDate(Calendar.getInstance().getTime())
-                    .setEndDate(Calendar.getInstance().getTime()).build()
+                    .setEndDate(Calendar.getInstance().time).build()
             val keyGenerator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, Constants.ANDROID_KEY_STORE)
             keyGenerator.initialize(spec)
             keyGenerator.generateKeyPair()
@@ -425,16 +421,13 @@ class Storage(private val context: Context, private val storageAlias: String, pr
                 removeAll(activity, file.name)
             }
 
-            val keyStore = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                KeyStore.getInstance(Constants.ANDROID_KEY_STORE)
-            } else {
-                KeyStore.getInstance(KeyStore.getDefaultType())
-            }
-            keyStore.load(null)
+            val keyStore = KeyStore.getInstance(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) Constants.ANDROID_KEY_STORE else KeyStore.getDefaultType()
+            ).apply { load(null) }
 
             for (alias in keyStore.aliases()) {
                 keyStore.deleteEntry(alias)
-                Log.d("SecureStorage", "deleted alias " + alias)
+                Log.d("SecureStorage", "deleted alias $alias")
             }
 
             return true
