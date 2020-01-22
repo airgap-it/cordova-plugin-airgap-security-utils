@@ -6,11 +6,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
-import android.provider.Settings;
+import android.support.v4.util.Consumer;
 import android.util.Log;
 import android.util.Pair;
+
+import java.util.Date;
+import java.util.Map;
+import java.util.HashMap;
+
 import android.view.WindowManager;
 import android.widget.Toast;
+import android.provider.Settings;
 
 import com.scottyab.rootbeer.RootBeer;
 
@@ -21,12 +27,8 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Consumer;
-
 import ch.papers.securestorage.Storage;
+
 import it.airgap.vault.BuildConfig;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
