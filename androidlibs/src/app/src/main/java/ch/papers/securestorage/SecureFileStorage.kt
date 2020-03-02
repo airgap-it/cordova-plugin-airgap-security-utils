@@ -167,6 +167,9 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
         return File(baseDir, hashedKey.toHexString())
     }
 
+    private fun ByteArray.toHexString(): String =
+        joinToString(separator = "") { String.format("%02x", it) }
+
     private fun InputStream.readTextAndClose(charset: Charset = Charsets.UTF_8): String {
         return this.bufferedReader(charset).use { it.readText() }
     }

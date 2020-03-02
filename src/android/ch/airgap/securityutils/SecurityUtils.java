@@ -68,14 +68,14 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_isDeviceSecure", pair -> securestorage_isDeviceSecure(pair.first, pair.second));
     actionMap.put("securestorage_secureDevice", pair -> securestorage_secureDevice(pair.first, pair.second));
     actionMap.put("securestorage_getItem", pair -> securestorage_getItem(pair.first, pair.second));
-    actionMap.put("securestorage_recoverItem", pair -> securestorage_recoverItem(pair.first, pair.second));
     actionMap.put("securestorage_setItem", pair -> securestorage_setItem(pair.first, pair.second));
-    actionMap.put("securestorage_setRecoverableItem", pair -> securestorage_setRecoverableItem(pair.first, pair.second));
     actionMap.put("secuarestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
     actionMap.put("securestorage_setupParanoiaPassword",
             pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+    actionMap.put("securestorage_setupRecoveryPassword",
+            pair -> securestorage_setupRecoveryPassword(pair.first, pair.second));
     actionMap.put("localauthentication_authenticate",
             pair -> localauthentication_authenticate(pair.first, pair.second));
     actionMap.put("localauthentication_setInvalidationTimeout",
@@ -169,29 +169,6 @@ public class SecurityUtils extends CordovaPlugin {
     });
   }
 
-  private void securestorage_recoverItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
-    String alias = data.getString(0);
-    boolean isParanoia = data.getBoolean(1);
-    String key = data.getString(2);
-    String recoveryString = data.getString(3);
-    if (!assessIntegrity()) {
-      callbackContext.error("Invalid state");
-    }
-    this.getStorageForAlias(alias, isParanoia).recoverString(key, recoveryString, () -> {
-      Log.d(TAG, "recovered successfully");
-      callbackContext.success();
-      return Unit.INSTANCE;
-    }, error -> {
-      Log.d(TAG, "recovered unsuccessfully");
-      callbackContext.error(error.toString());
-      return Unit.INSTANCE;
-    }, func -> {
-      authSuccessCallback = func;
-      showAuthenticationScreen();
-      return Unit.INSTANCE;
-    });
-  }
-
   private void securestorage_setItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
@@ -207,30 +184,6 @@ public class SecurityUtils extends CordovaPlugin {
       return Unit.INSTANCE;
     }, error -> {
       Log.d(TAG, "written unsuccessfully");
-      callbackContext.error(error.toString());
-      return Unit.INSTANCE;
-    }, func -> {
-      authSuccessCallback = func;
-      showAuthenticationScreen();
-      return Unit.INSTANCE;
-    });
-  }
-
-  private void securestorage_setRecoverableItem(JSONArray data, CallbackContext callbackContext) throws JSONException {
-    String alias = data.getString(0);
-    boolean isParanoia = data.getBoolean(1);
-    String key = data.getString(2);
-    String value = data.getString(3);
-    if (!assessIntegrity()) {
-      callbackContext.error("Invalid state");
-      return;
-    }
-    this.getStorageForAlias(alias, isParanoia).writeRecoverableString(key, value, recoveryKey -> {
-      Log.d(TAG,"written recoverable successfully, recovery key: " + recoveryKey);
-      callbackContext.success(recoveryKey);
-      return Unit.INSTANCE;
-    }, error -> {
-      Log.d(TAG, "written recoverable unsuccessfully");
       callbackContext.error(error.toString());
       return Unit.INSTANCE;
     }, func -> {
@@ -288,6 +241,30 @@ public class SecurityUtils extends CordovaPlugin {
     }, error -> {
       Log.d(TAG, "paranoia unsuccessfully");
       callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    });
+  }
+
+  private void securestorage_setupRecoveryPassword(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    String alias = data.getString(0);
+    boolean isParanoia = data.getBoolean(1);
+    String key = data.getString(2);
+    String value = data.getString(3);
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+      return;
+    }
+    this.getStorageForAlias(alias, isParanoia).writeRecoverableString(key, value, () -> {
+      Log.d(TAG,"written recoverable successfully");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "written recoverable unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
       return Unit.INSTANCE;
     });
   }

@@ -26,9 +26,9 @@ object Constants {
     const val PBKDF2_ITERATIONS = 10000
     const val PBKDF2_OUTPUT_KEY_LENGTH = 256
     const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA1"
+
     const val PARANOIA_KEY_FILE_NAME = "paranoia_key"
 
-    const val RECOVERY_KEY_SIZE = 32
-    const val RECOVERY_KEY_SALT_SIZE = 32
-    const val RECOVERY_FILE_KEY_SUFFIX = "-recovery"
+    const val RECOVERY_KEY_FILE_NAME = "recovery_key"
+    const val RECOVERY_KEY_SUFFIX = "-recovery"
 }
