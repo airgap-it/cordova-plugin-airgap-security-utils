@@ -2,12 +2,11 @@ package ch.papers.securestorage
 
 import android.os.Build
 import android.security.keystore.UserNotAuthenticatedException
-import android.util.Log
 import java.io.*
-import java.nio.charset.Charset
+import java.nio.ByteBuffer
+import java.nio.charset.*
 import java.security.Key
 import java.security.MessageDigest
-import javax.crypto.BadPaddingException
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
@@ -126,7 +125,7 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
                 if (result) {
                     success()
                 } else {
-                    throw Exception("could not delete file")
+                    throw Exception(Errors.CANNOT_DELETE_FILE)
                 }
             } catch (e: Exception) {
                 error(e)
@@ -146,7 +145,26 @@ class SecureFileStorage(private val masterSecret: Key?, private val salt: ByteAr
         return MessageDigest.getInstance(Constants.DIGEST_ALGORITHM).digest(salt + key.toByteArray())
     }
 
+    @Throws(Exception::class)
     private fun InputStream.readTextAndClose(charset: Charset = Charsets.UTF_8): String {
-        return this.bufferedReader(charset).use { it.readText() }
+        val bytes = use { it.readBytes() }
+
+        try {
+            val decoder = charset.newDecoder().apply {
+                onMalformedInput(CodingErrorAction.REPORT)
+                onUnmappableCharacter(CodingErrorAction.REPORT)
+            }
+
+            return decoder.decode(bytes)
+        } catch (e: CharacterCodingException) {
+            throw Exception(Errors.ITEM_CORRUPTED)
+        }
+    }
+
+    private fun CharsetDecoder.decode(bytes: ByteArray): String {
+        val byteBuffer = ByteBuffer.wrap(bytes)
+        val stringBuffer = StringBuffer(decode(byteBuffer))
+
+        return stringBuffer.toString()
     }
 }

@@ -10,5 +10,7 @@
     <string name="recovery_input_alert_title">Enter your Recovery Password</string>
     <string name="recovery_input_alert_setup_message">Choose a password with at least 4 characters.</string>
     <string name="recovery_input_alert_positive_button">Set Recovery</string>
+    <string name="recovery_input_alert_recover_message">Your secret is missing. Recover it using Recovery Password or re-import.</string>
+    <string name="recovery_input_alert_reimport_button">Import</string>
     <string name="recovery_input_alert_recover_button">Recover</string>
 </resources>
