@@ -5,7 +5,7 @@ buildscript {
     ext.dokka_version = '0.9.15'
     repositories {
         maven { url 'http://maven.google.com' }
-        maven { url "http://jcenter.bintray.com" }
+        jcenter()
         google()
     }
     dependencies {
@@ -21,7 +21,7 @@ buildscript {
 allprojects {
     repositories {
         maven { url 'http://maven.google.com' }
-        maven { url "http://jcenter.bintray.com" }
+        jcenter()
         mavenCentral()
     }
 }
