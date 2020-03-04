@@ -40,8 +40,8 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         get() = generateKeyStoreAlias(storageAlias)
 
     private val baseDir = File(context.getDir(Constants.BASE_FILE_PATH, Context.MODE_PRIVATE), storageAlias)
-    private val paranoiaKeyFile by lazy { File(baseDir, Constants.PARANOIA_KEY_FILE_NAME) }
-    private val recoveryKeyFile by lazy { File(baseDir, Constants.RECOVERY_KEY_FILE_NAME) }
+    private val paranoiaKeyFile by lazy { SecureFile(baseDir, Constants.PARANOIA_KEY_FILE_NAME) }
+    private val recoveryKeyFile by lazy { SecureFile(baseDir, Constants.RECOVERY_KEY_FILE_NAME, immediatelySave = false) }
 
     private val salt = ByteArray(Constants.KEY_SIZE / 8)
 
@@ -64,15 +64,26 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         }
 
         // now, read the generated salt from the fs
-        val inputStream = FileInputStream(saltFile)
-        inputStream.read(salt)
-        inputStream.close()
-
+        FileInputStream(saltFile).use {
+            it.read(salt)
+        }
     }
 
     fun readString(fileKey: String, success: (String) -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         if (keyStore.containsAlias(keyStoreAlias)) {
             val secureFileStorage = SecureFileStorage(getMasterKey(Cipher.DECRYPT_MODE), salt, baseDir)
+
+            val error: (Exception) -> Unit = { exception ->
+                if (exception is BadPaddingException) {
+                    recoverString(
+                            fileKey = fileKey,
+                            success = { readString(fileKey, success, error, requestAuthentication) },
+                            error = error,
+                            requestAuthentication = requestAuthentication
+                    )
+                }
+                error(exception)
+            }
 
             if (isParanoia) {
                 setupParanoiaPassword(
@@ -109,31 +120,32 @@ class Storage(private val context: Context, private val storageAlias: String, pr
     }
 
     fun recoverString(fileKey: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
-        showRecoveryAlert(
-                success = { password ->
-                    val recoveryKey = retrieveRecoveryKey(password)
-                    val recoverySecureFileStorage = SecureFileStorage(recoveryKey, salt, baseDir)
-
-                    recoverySecureFileStorage.read(
-                            fileKey = "${fileKey}${Constants.RECOVERY_KEY_SUFFIX}",
-                            success = {
-                                writeToSecureStorage(
-                                        fileKey = fileKey,
-                                        fileData = it,
-                                        success = success,
-                                        error = error,
-                                        requestAuthentication = requestAuthentication
-                                )
-                            },
-                            error = error,
-                            requestAuthentication = requestAuthentication
-                    )
-                }, error = error
-        )
+        requestAuthentication {
+            showRecoveryAlert(
+                    success = { password ->
+                        val recoveryKey = retrieveRecoveryKey(password)
+                        val recoverySecureFileStorage = SecureFileStorage(recoveryKey, salt, baseDir)
+                        recoverySecureFileStorage.read(
+                                fileKey = "${fileKey}${Constants.RECOVERY_KEY_SUFFIX}",
+                                success = {
+                                    writeToSecureStorage(
+                                            fileKey = fileKey,
+                                            fileData = it,
+                                            success = success,
+                                            error = error,
+                                            requestAuthentication = requestAuthentication
+                                    )
+                                },
+                                error = error,
+                                requestAuthentication = requestAuthentication
+                        )
+                    }, error = error
+            )
+        }
     }
 
     fun setupParanoiaPassword(success: () -> Unit, error: (Exception) -> Unit) {
-        if (!paranoiaKeyFile.exists()) {
+        if (!paranoiaKeyFile.exists) {
             showParanoiaSetupAlert({
                 generatePasswordKey(paranoiaKeyFile, it)
                 success()
@@ -144,9 +156,6 @@ class Storage(private val context: Context, private val storageAlias: String, pr
     }
 
     fun setupRecoveryPassword(success: (String) -> Unit, error: (Exception) -> Unit) {
-        if (recoveryKeyFile.exists()) {
-            recoveryKeyFile.delete()
-        }
         showRecoverySetupAlert({
             generatePasswordKey(recoveryKeyFile, it)
             success(it)
@@ -163,7 +172,7 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         )
     }
 
-    fun  writeRecoverableString(fileKey: String, fileData: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
+    fun writeRecoverableString(fileKey: String, fileData: String, success: () -> Unit, error: (Exception) -> Unit, requestAuthentication: (() -> Unit) -> Unit) {
         setupRecoveryPassword(
                 success = {
                     val recoveryKey = retrieveRecoveryKey(it)
@@ -171,7 +180,10 @@ class Storage(private val context: Context, private val storageAlias: String, pr
                     recoverySecureFileStorage.write(
                             fileKey = "${fileKey}${Constants.RECOVERY_KEY_SUFFIX}",
                             fileData = fileData,
-                            success = success,
+                            success = {
+                                recoveryKeyFile.save()
+                                success()
+                            },
                             error = error,
                             requestAuthentication = requestAuthentication
                     )
@@ -365,7 +377,7 @@ class Storage(private val context: Context, private val storageAlias: String, pr
 
     }
 
-    private fun generatePasswordKey(passwordFile: File, passphraseOrPin: String) {
+    private fun generatePasswordKey(passwordFile: SecureFile, passphraseOrPin: String) {
         val salt = ByteArray(Constants.KEY_SIZE / 8).also { SecureRandom().nextBytes(it) }
         val inputSecretKey = generateSecretKey(passphraseOrPin, salt)
 
@@ -383,7 +395,7 @@ class Storage(private val context: Context, private val storageAlias: String, pr
             init(Cipher.ENCRYPT_MODE, inputSecretKey, IvParameterSpec(salt.sliceArray(IntRange(0, 15))))
         }
         try {
-            FileOutputStream(passwordFile).use {
+            passwordFile.output {
                 it.write(ByteBuffer.allocate(4).putInt(Constants.PBKDF2_ITERATIONS).array()) //4 octets per int
                 it.write(salt)
                 it.write(keyCipher.doFinal(masterSecretKeyBytes + masterSecretKeyDigest))
@@ -414,12 +426,9 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         return retrievePasswordSecretKeySpec(recoveryKeyFile, passphraseOrPin)
     }
 
-    private fun retrievePasswordSecretKeySpec(passwordFile: File, passphraseOrPin: String): SecretKeySpec {
-        val inputStream = FileInputStream(passwordFile)
-
+    private fun retrievePasswordSecretKeySpec(passwordFile: SecureFile, passphraseOrPin: String): SecretKeySpec {
         val buffer = ByteArray(196)
-        val readBytes = readStreamToBuffer(inputStream, buffer)
-        inputStream.close()
+        val readBytes = passwordFile.readToBuffer(buffer)
 
         val secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM)
         val salt = buffer.sliceArray(IntRange(4, 35))
@@ -442,16 +451,6 @@ class Storage(private val context: Context, private val storageAlias: String, pr
         }
 
         return masterSecretKey
-    }
-
-    private fun readStreamToBuffer(inputStream: InputStream, buffer: ByteArray): Int {
-        var readByteCount = 0
-        var totalByteCount = 0
-        while (readByteCount != -1 && buffer.size > totalByteCount) {
-            readByteCount = inputStream.read(buffer, totalByteCount, buffer.size - totalByteCount)
-            totalByteCount += readByteCount
-        }
-        return totalByteCount
     }
 
     private fun EditText.afterTextChanged(afterTextChanged: (String) -> Unit) {
