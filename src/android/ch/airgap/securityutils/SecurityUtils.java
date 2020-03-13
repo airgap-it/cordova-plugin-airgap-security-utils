@@ -69,7 +69,7 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_secureDevice", pair -> securestorage_secureDevice(pair.first, pair.second));
     actionMap.put("securestorage_getItem", pair -> securestorage_getItem(pair.first, pair.second));
     actionMap.put("securestorage_setItem", pair -> securestorage_setItem(pair.first, pair.second));
-    actionMap.put("secuarestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
+    actionMap.put("securestorage_removeAll", pair -> securestorage_removeAll(pair.first, pair.second));
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
     actionMap.put("securestorage_setupParanoiaPassword",
