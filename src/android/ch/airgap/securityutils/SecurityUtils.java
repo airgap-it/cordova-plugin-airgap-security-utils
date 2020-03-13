@@ -18,6 +18,8 @@ import android.view.WindowManager;
 import android.widget.Toast;
 import android.provider.Settings;
 
+import com.scottyab.rootbeer.RootBeer;
+
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
@@ -30,9 +32,6 @@ import ch.papers.securestorage.Storage;
 import it.airgap.vault.BuildConfig;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
-import kotlin.jvm.functions.Function1;
-
-import com.scottyab.rootbeer.RootBeer;
 
 public class SecurityUtils extends CordovaPlugin {
 
@@ -74,40 +73,32 @@ public class SecurityUtils extends CordovaPlugin {
     actionMap.put("securestorage_removeItem", pair -> securestorage_removeItem(pair.first, pair.second));
     actionMap.put("securestorage_destroy", pair -> securestorage_destroy(pair.first, pair.second));
     actionMap.put("securestorage_setupParanoiaPassword",
-        pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+            pair -> securestorage_setupParanoiaPassword(pair.first, pair.second));
+    actionMap.put("securestorage_setupRecoveryPassword",
+            pair -> securestorage_setupRecoveryPassword(pair.first, pair.second));
     actionMap.put("localauthentication_authenticate",
-        pair -> localauthentication_authenticate(pair.first, pair.second));
+            pair -> localauthentication_authenticate(pair.first, pair.second));
     actionMap.put("localauthentication_setInvalidationTimeout",
-        pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
+            pair -> localauthentication_setInvalidationTimeout(pair.first, pair.second));
     actionMap.put("localauthentication_invalidate", pair -> localauthentication_invalidate(pair.first, pair.second));
     actionMap.put("localauthentication_toggleAutomaticAuthentication",
-        pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
+            pair -> localauthentication_toggleAutomaticAuthentication(pair.first, pair.second));
     actionMap.put("localauthentication_setAuthenticationReason",
-        pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
+            pair -> localauthentication_setAuthenticationReason(pair.first, pair.second));
     actionMap.put("deviceintegrity_assess", pair -> deviceintegrity_assess(pair.first, pair.second));
     actionMap.put("securescreen_setWindowSecureFlag", pair -> securescreen_setWindowSecureFlag(pair.first, pair.second));
     actionMap.put("securescreen_clearWindowSecureFlag", pair -> securescreen_clearWindowSecureFlag(pair.first, pair.second));
   }
 
-  public void securescreen_setWindowSecureFlag(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  public void securescreen_setWindowSecureFlag(JSONArray data, CallbackContext callbackContext) {
     CordovaInterface cordova = this.cordova;
-    cordova.getActivity().runOnUiThread(new Runnable() {
-      @Override
-      public void run() {
-        cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-      }
-    });
+    cordova.getActivity().runOnUiThread(() -> cordova.getActivity().getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE));
     callbackContext.success();
   }
 
-  public void securescreen_clearWindowSecureFlag(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  public void securescreen_clearWindowSecureFlag(JSONArray data, CallbackContext callbackContext) {
     CordovaInterface cordova = this.cordova;
-    cordova.getActivity().runOnUiThread(new Runnable() {
-      @Override
-      public void run() {
-        cordova.getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-      }
-    });
+    cordova.getActivity().runOnUiThread(() -> cordova.getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE));
     callbackContext.success();
   }
 
@@ -118,14 +109,14 @@ public class SecurityUtils extends CordovaPlugin {
   private void storeAutoAuthenticationValue(boolean value) {
     SharedPreferences.Editor editor = preferences.edit();
     editor.putBoolean("autoauth", value);
-    editor.commit();
+    editor.apply();
   }
 
   private Storage getStorageForAlias(String alias, boolean isParanoia) {
     return new Storage(this.cordova.getActivity(), alias, isParanoia);
   }
 
-  public boolean execute(String action, JSONArray data, CallbackContext callbackContext) throws JSONException {
+  public boolean execute(String action, JSONArray data, CallbackContext callbackContext) {
     try {
       ThrowingConsumer<Pair<JSONArray, CallbackContext>> c = actionMap.get(action);
       if (c != null) {
@@ -146,11 +137,11 @@ public class SecurityUtils extends CordovaPlugin {
     callbackContext.success();
   }
 
-  private void securestorage_isDeviceSecure(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void securestorage_isDeviceSecure(JSONArray data, CallbackContext callbackContext) {
     callbackContext.success(mKeyguardManager.isKeyguardSecure() ? 1 : 0);
   }
 
-  private void securestorage_secureDevice(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void securestorage_secureDevice(JSONArray data, CallbackContext callbackContext) {
     Intent intent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
     this.cordova.getActivity().startActivity(intent);
   }
@@ -163,27 +154,18 @@ public class SecurityUtils extends CordovaPlugin {
       callbackContext.error("Invalid state");
       return;
     }
-    this.getStorageForAlias(alias, isParanoia).readString(key, new Function1<String, Unit>() {
-      @Override
-      public Unit invoke(String s) {
-        Log.d(TAG, "read successfully");
-        callbackContext.success(s);
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Exception, Unit>() {
-      @Override
-      public Unit invoke(Exception e) {
-        Log.d(TAG, "read unsuccessfully");
-        callbackContext.error(e.toString());
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Function0<Unit>, Unit>() {
-      @Override
-      public Unit invoke(Function0<Unit> function0) {
-        authSuccessCallback = function0;
-        showAuthenticationScreen();
-        return Unit.INSTANCE;
-      }
+    this.getStorageForAlias(alias, isParanoia).readString(key, item -> {
+      Log.d(TAG, "read successfully");
+      callbackContext.success(item);
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "read unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
+      return Unit.INSTANCE;
     });
   }
 
@@ -196,27 +178,18 @@ public class SecurityUtils extends CordovaPlugin {
       callbackContext.error("Invalid state");
       return;
     }
-    this.getStorageForAlias(alias, isParanoia).writeString(key, value, new Function0<Unit>() {
-      @Override
-      public Unit invoke() {
-        Log.d(TAG, "written successfully");
-        callbackContext.success();
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Exception, Unit>() {
-      @Override
-      public Unit invoke(Exception e) {
-        Log.d(TAG, "written unsuccessfully");
-        callbackContext.error(e.toString());
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Function0<Unit>, Unit>() {
-      @Override
-      public Unit invoke(Function0<Unit> function0) {
-        authSuccessCallback = function0;
-        showAuthenticationScreen();
-        return Unit.INSTANCE;
-      }
+    this.getStorageForAlias(alias, isParanoia).writeString(key, value, () -> {
+      Log.d(TAG, "written successfully");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "written unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
+      return Unit.INSTANCE;
     });
   }
 
@@ -236,24 +209,18 @@ public class SecurityUtils extends CordovaPlugin {
     boolean isParanoia = data.getBoolean(1);
     String key = data.getString(2);
 
-    this.getStorageForAlias(alias, isParanoia).removeString(key, new Function0<Unit>() {
-      @Override
-      public Unit invoke() {
-        Log.d(TAG, "delete successfully");
-        callbackContext.success();
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Exception, Unit>() {
-      @Override
-      public Unit invoke(Exception e) {
-        Log.d(TAG, "delete unsuccessfully");
-        callbackContext.error(e.toString());
-        return Unit.INSTANCE;
-      }
+    this.getStorageForAlias(alias, isParanoia).removeString(key, () -> {
+      Log.d(TAG, "delete successfully");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "delete unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
     });
   }
 
-  private void securestorage_destroy(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void securestorage_destroy(JSONArray data, CallbackContext callbackContext) {
     boolean result = Storage.Companion.destroy(this.cordova.getActivity());
     if (result) {
       callbackContext.success();
@@ -263,28 +230,46 @@ public class SecurityUtils extends CordovaPlugin {
   }
 
   private void securestorage_setupParanoiaPassword(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+          throws JSONException {
     String alias = data.getString(0);
     boolean isParanoia = data.getBoolean(1);
 
-    this.getStorageForAlias(alias, isParanoia).setupParanoiaPassword(new Function0<Unit>() {
-      @Override
-      public Unit invoke() {
-        Log.d(TAG, "paranoia successfully setup");
-        callbackContext.success();
-        return Unit.INSTANCE;
-      }
-    }, new Function1<Exception, Unit>() {
-      @Override
-      public Unit invoke(Exception e) {
-        Log.d(TAG, "paranoia unsuccessfully");
-        callbackContext.error(e.toString());
-        return Unit.INSTANCE;
-      }
+    this.getStorageForAlias(alias, isParanoia).setupParanoiaPassword(() -> {
+      Log.d(TAG, "paranoia successfully setup");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "paranoia unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
     });
   }
 
-  private void localauthentication_authenticate(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void securestorage_setupRecoveryPassword(JSONArray data, CallbackContext callbackContext) throws JSONException {
+    String alias = data.getString(0);
+    boolean isParanoia = data.getBoolean(1);
+    String key = data.getString(2);
+    String value = data.getString(3);
+    if (!assessIntegrity()) {
+      callbackContext.error("Invalid state");
+      return;
+    }
+    this.getStorageForAlias(alias, isParanoia).writeRecoverableString(key, value, () -> {
+      Log.d(TAG,"written recoverable successfully");
+      callbackContext.success();
+      return Unit.INSTANCE;
+    }, error -> {
+      Log.d(TAG, "written recoverable unsuccessfully");
+      callbackContext.error(error.toString());
+      return Unit.INSTANCE;
+    }, func -> {
+      authSuccessCallback = func;
+      showAuthenticationScreen();
+      return Unit.INSTANCE;
+    });
+  }
+
+  private void localauthentication_authenticate(JSONArray data, CallbackContext callbackContext) {
     authenticate(result -> {
       if (result) {
         callbackContext.success();
@@ -294,21 +279,19 @@ public class SecurityUtils extends CordovaPlugin {
     });
   }
 
-  private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+  private void localauthentication_setInvalidationTimeout(JSONArray data, CallbackContext callbackContext) {
     int timeout = data.optInt(0, 10);
     invalidateAfterSeconds = timeout;
     callbackContext.success();
   }
 
-  private void localauthentication_invalidate(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void localauthentication_invalidate(JSONArray data, CallbackContext callbackContext) {
     isAuthenticated = false;
     lastBackgroundDate = null;
     callbackContext.success();
   }
 
-  private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+  private void localauthentication_toggleAutomaticAuthentication(JSONArray data, CallbackContext callbackContext) {
     boolean newValue = data.optBoolean(0, false);
     if (newValue != automaticLocalAuthentication) {
       automaticLocalAuthentication = newValue;
@@ -317,8 +300,7 @@ public class SecurityUtils extends CordovaPlugin {
     callbackContext.success();
   }
 
-  private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext)
-      throws JSONException {
+  private void localauthentication_setAuthenticationReason(JSONArray data, CallbackContext callbackContext) {
     callbackContext.success();
   }
 
@@ -350,7 +332,7 @@ public class SecurityUtils extends CordovaPlugin {
     }
   }
 
-  private void deviceintegrity_assess(JSONArray data, CallbackContext callbackContext) throws JSONException {
+  private void deviceintegrity_assess(JSONArray data, CallbackContext callbackContext) {
     callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, assessIntegrity()));
   }
 

@@ -282,6 +282,24 @@ SecureStorage.prototype.setupParanoiaPassword = function(
   )
 }
 
+SecureStorage.prototype.setupRecoveryPassword = function(
+  key,
+  item,
+  successCallback,
+  errorCallback
+) {
+  if (!this.isInitiated) {
+    return errorCallback("call initialize() first.")
+  }
+  exec(
+    successCallback,
+    errorCallback,
+    PLUGIN_NAME,
+    SecureStorageID + "_setupRecoveryPassword",
+    [this.alias, this.isParanoia, key, item]
+  )
+}
+
 SecureStorage.prototype.destroy = function(successCallback, errorCallback) {
   exec(
     successCallback,
